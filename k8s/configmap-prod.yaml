@@ -6,6 +6,6 @@ metadata:
     app: nginx-hello
     environment: production
 data:
-  NGINX_PORT: "80"
+  NGINX_PORT: "8080"
   NGINX_SERVER_NAME: "example.com www.example.com"
   NGINX_WORKER_CONNECTIONS: "2048"

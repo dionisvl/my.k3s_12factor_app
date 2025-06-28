@@ -34,7 +34,7 @@ test-build: ## Test build
 test-run: ## Test runtime
 	@echo "$(GREEN)Testing runtime...$(RESET)"
 	@docker rm -f nginx-test 2>/dev/null || true
-	docker run -d --name nginx-test -p 8080:80 $(IMAGE_NAME):$(IMAGE_TAG)
+	docker run -d --name nginx-test -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
 	@sleep 3
 	@curl -f http://localhost:8080/ | grep -q "Hello World" && echo "$(GREEN)✅ Main page OK$(RESET)"
 	@curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
@@ -71,7 +71,7 @@ k8s-config-prod: ## Switch to production config
 
 k8s-test: ## Test Kubernetes deployment
 	kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
-	kubectl port-forward svc/nginx-hello-service 8082:80 &
+	kubectl port-forward svc/nginx-hello-service 8082:8080 &
 	@sleep 5
 	@curl -f http://localhost:8082/ | grep -q "Hello World" && echo "$(GREEN)✅ K8s test OK$(RESET)"
 	@pkill -f "kubectl port-forward" || true
@@ -85,15 +85,6 @@ k8s-destroy: ## Destroy cluster
 	kubectl delete -f k8s/configmap.yaml 2>/dev/null || true
 	kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
 
-env-local: ## Create local env file
-	@echo "NGINX_PORT=80" > .env.local
-	@echo "NGINX_SERVER_NAME=localhost site.local" >> .env.local
-	@echo "NGINX_WORKER_CONNECTIONS=1024" >> .env.local
-
-env-prod: ## Create production env file
-	@echo "NGINX_PORT=80" > .env.prod
-	@echo "NGINX_SERVER_NAME=example.com www.example.com" >> .env.prod
-	@echo "NGINX_WORKER_CONNECTIONS=2048" >> .env.prod
 
 clean: ## Clean up containers and images
 	@docker rm -f nginx-test nginx-test-custom 2>/dev/null || true

@@ -18,15 +18,18 @@ Production-ready nginx application with Kubernetes deployment and CI/CD.
 
 | Variable                   | Local                            | Production                                    |
 |----------------------------|----------------------------------|-----------------------------------------------|
+| `NGINX_PORT`               | `8080`                           | `8080`                                        |
 | `NGINX_SERVER_NAME`        | `localhost site.local app.local` | `example.com www.example.com api.example.com` |
 | `NGINX_WORKER_CONNECTIONS` | `1024`                           | `2048`                                        |
 
 ```bash
 # .env (local)
+NGINX_PORT=8080
 NGINX_SERVER_NAME=localhost site.local app.local
 NGINX_WORKER_CONNECTIONS=1024
 
 # .env.prod (production)  
+NGINX_PORT=8080
 NGINX_SERVER_NAME=example.com www.example.com api.example.com
 NGINX_WORKER_CONNECTIONS=2048
 ```
@@ -52,7 +55,7 @@ make k8s-config-prod      # Switch to production config
 ### Manual Docker
 ```bash
 docker compose up -d
-curl http://localhost
+curl http://localhost:8080
 ```
 
 ### Manual Kubernetes

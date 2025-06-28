@@ -17,7 +17,7 @@ jobs:
       
       - name: Test runtime
         run: |
-          docker run -d --name test -p 8080:80 nginx-hello:test
+          docker run -d --name test -p 8080:8080 -e NGINX_PORT=8080 nginx-hello:test
           # Wait for the container to be ready
           for i in $(seq 1 10); do
             sleep 2
@@ -64,8 +64,8 @@ jobs:
       - name: Test endpoints
         run: |
           POD_NAME=$(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec $POD_NAME -- curl -s http://localhost/ | grep -q "Hello World" && echo "✅ Main page OK"
-          kubectl exec $POD_NAME -- curl -s http://localhost/health | grep -q "OK" && echo "✅ Health check OK"
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/ | grep -q "Hello World" && echo "✅ Main page OK"
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK" && echo "✅ Health check OK"
 
   security:
     runs-on: ubuntu-latest
