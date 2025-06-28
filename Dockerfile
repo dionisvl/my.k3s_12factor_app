@@ -12,7 +12,7 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /tmp && \
     chmod +x /entrypoint.sh
 
-ENV NGINX_PORT=80
+ENV NGINX_PORT=8080
 ENV NGINX_SERVER_NAME="localhost"
 ENV NGINX_WORKER_CONNECTIONS=1024
 
