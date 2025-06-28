@@ -34,8 +34,8 @@ test-build: ## Test build
 test-run: ## Test runtime
 	@echo "$(GREEN)Testing runtime...$(RESET)"
 	@docker rm -f nginx-test 2>/dev/null || true
-	docker run -d --name nginx-test -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
-	@sleep 3
+	@docker run -d --name nginx-test -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
+	@sleep 5
 	@curl -f http://localhost:8080/ | grep -q "Hello World" && echo "$(GREEN)✅ Main page OK$(RESET)"
 	@curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
 	@docker stop nginx-test && docker rm nginx-test
