@@ -33,7 +33,18 @@ jobs:
           kind load docker-image nginx-hello:test --name test
           kubectl apply -f k8s/configmap.yaml
           sed 's/nginx_hello-nginx:latest/nginx-hello:test/g' k8s/k8s-deployment.yaml | kubectl apply -f -
-          kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=120s
+          
+      - name: Wait for deployment
+        run: |
+          kubectl wait --for=condition=progressing deployment/nginx-hello --timeout=30s
+          kubectl wait --for=condition=available deployment/nginx-hello --timeout=60s
+          kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=30s
+          
+      - name: Test endpoints
+        run: |
+          POD_NAME=$(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec $POD_NAME -- curl -s http://localhost/ | grep -q "Hello World" && echo "✅ Main page OK"
+          kubectl exec $POD_NAME -- curl -s http://localhost/health | grep -q "OK" && echo "✅ Health check OK"
 
   security:
     runs-on: ubuntu-latest

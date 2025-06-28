@@ -14,7 +14,7 @@ Production-ready nginx application with Kubernetes deployment and CI/CD.
 - CI/CD pipeline with testing and security scanning
 - Build automation with Makefile
 
-### Configuration
+## Configuration
 
 | Variable                   | Local                            | Production                                    |
 |----------------------------|----------------------------------|-----------------------------------------------|
@@ -62,7 +62,7 @@ docker build -t nginx_hello-nginx:latest .
 kind load docker-image nginx_hello-nginx:latest --name hello-cluster
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/k8s-deployment.yaml
-kubectl wait --for=condition=ready pod -l app=nginx-hello
+kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
 ```
 
 ## Endpoints
@@ -72,7 +72,7 @@ kubectl wait --for=condition=ready pod -l app=nginx-hello
 
 ## CI/CD
 
-- **Test**: Build, runtime, Kubernetes deployment
+- **Test**: Build, runtime, Kubernetes deployment with kubectl exec
 - **Security**: Trivy vulnerability scanning
 
 ```bash
