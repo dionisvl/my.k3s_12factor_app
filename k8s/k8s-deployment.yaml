@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-hello
+  namespace: default
+  labels:
+    app: nginx-hello
+    version: v1.0.0
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: nginx-hello
+  template:
+    metadata:
+      labels:
+        app: nginx-hello
+        version: v1.0.0
+    spec:
+      containers:
+      - name: nginx
+        image: nginx_hello-nginx:latest
+        imagePullPolicy: Never
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        env:
+        - name: NGINX_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: nginx-config
+              key: NGINX_PORT
+        - name: NGINX_SERVER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: nginx-config
+              key: NGINX_SERVER_NAME
+        - name: NGINX_WORKER_CONNECTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: nginx-config
+              key: NGINX_WORKER_CONNECTIONS
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-hello-service
+  labels:
+    app: nginx-hello
+spec:
+  selector:
+    app: nginx-hello
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+    protocol: TCP
+  type: NodePort

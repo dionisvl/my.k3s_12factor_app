@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build image
+        run: docker build -t nginx-hello:test .
+      
+      - name: Test runtime
+        run: |
+          docker run -d --name test -p 8080:80 nginx-hello:test
+          sleep 5
+          curl -f http://localhost:8080/ | grep "Hello World"
+          curl -f http://localhost:8080/health | grep "OK"
+          docker stop test
+
+      - name: Test Kubernetes
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: test
+
+      - name: Deploy to Kind
+        run: |
+          kind load docker-image nginx-hello:test --name test
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/k8s-deployment.yaml
+          kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
+
+  security:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: nginx-hello:test
+          format: 'table'

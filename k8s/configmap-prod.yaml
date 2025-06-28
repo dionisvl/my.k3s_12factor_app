@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  labels:
+    app: nginx-hello
+    environment: production
+data:
+  NGINX_PORT: "80"
+  NGINX_SERVER_NAME: "example.com www.example.com"
+  NGINX_WORKER_CONNECTIONS: "2048"

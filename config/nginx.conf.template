@@ -1,0 +1,44 @@
+pid /tmp/nginx.pid;
+
+events {
+    worker_connections ${NGINX_WORKER_CONNECTIONS};
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    
+    access_log /tmp/access.log;
+    error_log /tmp/error.log;
+    
+    client_body_temp_path /tmp/cache/nginx/client_temp;
+    proxy_temp_path /tmp/cache/nginx/proxy_temp;
+    fastcgi_temp_path /tmp/cache/nginx/fastcgi_temp;
+    uwsgi_temp_path /tmp/cache/nginx/uwsgi_temp;
+    scgi_temp_path /tmp/cache/nginx/scgi_temp;
+    
+    server {
+        listen ${NGINX_PORT};
+        server_name ${NGINX_SERVER_NAME};
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        location / {
+            try_files $uri $uri/ =404;
+        }
+        
+        location /health {
+            return 200 'OK\n';
+            add_header Content-Type text/plain;
+            access_log off;
+        }
+        
+        location /nginx_status {
+            stub_status on;
+            access_log off;
+            allow 127.0.0.1;
+            allow 10.0.0.0/8;
+            deny all;
+        }
+    }
+}
