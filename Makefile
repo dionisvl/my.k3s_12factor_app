@@ -52,6 +52,10 @@ test-custom-config: ## Test custom configuration
 
 k8s-cluster: ## Create Kind cluster
 	@kind get clusters | grep -q $(CLUSTER_NAME) || kind create cluster --name $(CLUSTER_NAME)
+	@echo "$(GREEN)Installing nginx-ingress controller...$(RESET)"
+	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "$(GREEN)Waiting for ingress controller to be ready...$(RESET)"
+	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
 
 k8s-load: build ## Load image to cluster
 	kind load docker-image $(IMAGE_NAME):$(IMAGE_TAG) --name $(CLUSTER_NAME)
@@ -60,6 +64,7 @@ k8s-deploy: k8s-load ## Deploy to Kubernetes
 	@echo "$(GREEN)Deploying to Kubernetes...$(RESET)"
 	kubectl apply -f k8s/configmap.yaml
 	kubectl apply -f k8s/k8s-deployment.yaml
+	kubectl apply -f k8s/ingress.yaml
 
 k8s-config-local: ## Switch to local config
 	kubectl apply -f k8s/configmap.yaml
@@ -71,16 +76,17 @@ k8s-config-prod: ## Switch to production config
 
 k8s-test: ## Test Kubernetes deployment
 	kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
-	kubectl port-forward svc/nginx-hello-service 8082:8080 &
-	@sleep 5
-	@curl -f http://localhost:8082/ | grep -q "Hello World" && echo "$(GREEN)✅ K8s test OK$(RESET)"
-	@pkill -f "kubectl port-forward" || true
+	@echo "Testing via Ingress at http://site-r1.local"
+	@curl -H "Host: site-r1.local" http://localhost:80/ | grep -q "Hello World" && echo "$(GREEN)✅ Ingress test OK$(RESET)" || echo "$(GREEN)ℹ️  Ingress not ready, testing via port-forward$(RESET)"
+	@kubectl port-forward svc/nginx-hello-service 8082:8080 & sleep 3; curl -f http://localhost:8082/ | grep -q "Hello World" && echo "$(GREEN)✅ Service test OK$(RESET)"; pkill -f "kubectl port-forward" || true
 
 k8s-status: ## Show status
 	kubectl get pods -l app=nginx-hello
 	kubectl get svc nginx-hello-service
+	kubectl get ingress nginx-hello-ingress
 
 k8s-destroy: ## Destroy cluster
+	kubectl delete -f k8s/ingress.yaml 2>/dev/null || true
 	kubectl delete -f k8s/k8s-deployment.yaml 2>/dev/null || true
 	kubectl delete -f k8s/configmap.yaml 2>/dev/null || true
 	kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
@@ -93,6 +99,12 @@ clean: ## Clean up containers and images
 ci-test: test ## Run CI tests locally
 
 deploy: k8s-cluster k8s-deploy k8s-test ## Full deployment pipeline
+
+k8s-ingress-setup:
+	@echo "$(GREEN)Installing nginx-ingress controller...$(RESET)"
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "$(GREEN)Waiting for ingress controller...$(RESET)"
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
 
 up: dev
 down: dev-stop
