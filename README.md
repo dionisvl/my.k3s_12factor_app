@@ -1,6 +1,6 @@
 # Nginx Hello World Kubernetes Project
 
-![CI/CD](https://github.com/username/nginx-hello-world/workflows/CI/CD%20Pipeline/badge.svg)
+![CI/CD](https://github.com/dionisvl/my.k8s_12factor_app/workflows/CI/badge.svg)
 ![Version](https://img.shields.io/badge/version-v1.0.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
