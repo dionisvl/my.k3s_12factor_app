@@ -46,9 +46,9 @@ API -> KP: Create Service nginx-hello-service
 KP -> KP: Setup iptables rules\nfor NodePort 30080\nLoad balance between pods
 
 == User Requests ==
-D -> K: kubectl port-forward svc/nginx-hello-service 8082:80
+D -> K: kubectl port-forward svc/nginx-hello-service 8082:8080
 K -> API: Create port-forward
-API -> KL: Forward port 8082 -> Service:80
+API -> KL: Forward port 8082 -> Service:8080
 
 == Main Page Request ==
 D -> D: curl http://localhost:8082
@@ -81,12 +81,12 @@ loop Every 10 seconds (Liveness) / 5 seconds (Readiness)
 end
 
 == Configuration Update ==
-D -> K: kubectl patch configmap nginx-config --patch '{"data":{"NGINX_PORT":"8080"}}'
+D -> K: kubectl patch configmap nginx-config --patch '{"data":{"NGINX_WORKER_CONNECTIONS":"2048"}}'
 D -> K: kubectl rollout restart deployment nginx-hello
 K -> API: Update ConfigMap
 K -> API: Restart deployment
 API -> KL: Rolling restart pods
-note over D, KL: New pods pick up updated config
+note over D, KL: New pods pick up updated worker connections
 
 == Scaling Test ==
 D -> K: kubectl scale deployment nginx-hello --replicas=1
