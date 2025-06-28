@@ -18,7 +18,12 @@ jobs:
       - name: Test runtime
         run: |
           docker run -d --name test -p 8080:80 nginx-hello:test
-          sleep 5
+          # Wait for the container to be ready
+          for i in $(seq 1 10); do
+            sleep 2
+            curl -f http://localhost:8080/health && break
+            echo "Waiting for container to be ready..."
+          done
           curl -f http://localhost:8080/ | grep "Hello World"
           curl -f http://localhost:8080/health | grep "OK"
           docker stop test
@@ -38,8 +43,23 @@ jobs:
         run: |
           kubectl get pods -l app=nginx-hello
           kubectl describe deployment nginx-hello
+          sleep 10
+          kubectl describe pods -l app=nginx-hello
           kubectl rollout status deployment/nginx-hello --timeout=180s
           kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
+
+      - name: Debug deployment
+        if: always()
+        run: |
+          echo "--- Pods status ---"
+          kubectl get pods -l app=nginx-hello -o wide
+          echo "--- Describe pods ---"
+          for pod in $(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[*].metadata.name}'); do
+            echo "--- Describing pod: $pod ---"
+            kubectl describe pod $pod
+            echo "--- Logs for pod: $pod ---"
+            kubectl logs $pod --all-containers=true
+          done
           
       - name: Test endpoints
         run: |
