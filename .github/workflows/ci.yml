@@ -36,7 +36,9 @@ jobs:
           
       - name: Wait for deployment
         run: |
-          kubectl rollout status deployment/nginx-hello --timeout=120s
+          kubectl get pods -l app=nginx-hello
+          kubectl describe deployment nginx-hello
+          kubectl rollout status deployment/nginx-hello --timeout=180s
           kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
           
       - name: Test endpoints
