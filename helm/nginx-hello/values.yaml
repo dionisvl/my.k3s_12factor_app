@@ -1,0 +1,74 @@
+# Default values for nginx-hello
+replicaCount: 2
+
+image:
+  repository: nginx_hello-nginx
+  pullPolicy: Never
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: site-r1.local
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: site-r2.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+config:
+  nginxPort: "8080"
+  nginxServerName: "localhost site-r1.local site-r2.local"
+  nginxWorkerConnections: "1024"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 250m
+    memory: 64Mi
+
+probes:
+  liveness:
+    path: /health
+    port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    path: /health
+    port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 1
+
+appLabels:
+  app: nginx-hello
+  version: v1.0.0
+
+environment: local

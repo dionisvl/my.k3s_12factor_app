@@ -6,94 +6,211 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  IMAGE_NAME: nginx-hello
+  IMAGE_TAG: test
+  CLUSTER_NAME: test
+  HELM_TIMEOUT: 300s
+
 jobs:
-  test:
+  build:
+    name: Build and Test Docker Image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: Build image
-        run: docker build -t nginx-hello:test .
+      - name: Build Docker image
+        run: docker build -t ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} .
       
-      - name: Test runtime
+      - name: Test Docker container
         run: |
-          docker run -d --name test -p 8080:8080 -e NGINX_PORT=8080 nginx-hello:test
-          # Wait for the container to be ready
+          # Start container
+          docker run -d --name test-container -p 8080:8080 \
+            -e NGINX_PORT=8080 ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          
+          # Wait for container readiness
           for i in $(seq 1 10); do
             sleep 2
-            curl -f http://localhost:8080/health && break
-            echo "Waiting for container to be ready..."
+            if curl -f http://localhost:8080/health; then
+              echo "✅ Container is ready"
+              break
+            fi
+            echo "Waiting for container... ($i/10)"
           done
+          
+          # Test endpoints
           curl -f http://localhost:8080/ | grep "Hello World"
           curl -f http://localhost:8080/health | grep "OK"
-          docker stop test
+          echo "✅ Docker tests passed"
+          
+          # Cleanup
+          docker stop test-container
+      
+      - name: Save Docker image
+        run: docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > image.tar.gz
+      
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar.gz
+          retention-days: 1
 
-      - name: Test Kubernetes
+  test-kubectl:
+    name: Test Kubernetes (kubectl)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+      
+      - name: Load Docker image
+        run: gunzip -c image.tar.gz | docker load
+      
+      - name: Create Kind cluster
         uses: helm/kind-action@v1.10.0
         with:
-          cluster_name: test
-
+          cluster_name: ${{ env.CLUSTER_NAME }}
+      
       - name: Setup nginx-ingress
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-          echo "Waiting for ingress controller deployment..."
-          kubectl wait --namespace ingress-nginx --for=condition=available deployment/ingress-nginx-controller --timeout=300s
-          echo "Waiting for ingress controller pod..."
-          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s || true
-
-      - name: Deploy to Kind
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=180s
+      
+      - name: Deploy application
         run: |
-          kind load docker-image nginx-hello:test --name test
+          kind load docker-image ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} --name ${{ env.CLUSTER_NAME }}
           kubectl apply -f k8s/configmap.yaml
-          sed 's/nginx_hello-nginx:latest/nginx-hello:test/g' k8s/k8s-deployment.yaml | kubectl apply -f -
-          kubectl apply -f k8s/ingress.yaml || echo "⚠️ Ingress apply failed, continuing with pod tests..."
-          
+          sed 's/nginx_hello-nginx:latest/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}/g' k8s/k8s-deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/ingress.yaml
+      
       - name: Wait for deployment
         run: |
-          kubectl get pods -l app=nginx-hello
-          kubectl describe deployment nginx-hello
-          sleep 10
-          kubectl describe pods -l app=nginx-hello
           kubectl rollout status deployment/nginx-hello --timeout=180s
           kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
-
-      - name: Debug deployment
-        if: always()
-        run: |
-          echo "--- Pods status ---"
-          kubectl get pods -l app=nginx-hello -o wide
-          echo "--- Ingress status ---"
-          kubectl get ingress nginx-hello-ingress || echo "Ingress not found"
-          kubectl describe ingress nginx-hello-ingress || echo "Cannot describe ingress"
-          echo "--- Service status ---"
-          kubectl get svc nginx-hello-service
-          kubectl get endpoints nginx-hello-service
-          echo "--- Describe pods ---"
-          for pod in $(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[*].metadata.name}'); do
-            echo "--- Describing pod: $pod ---"
-            kubectl describe pod $pod
-            echo "--- Logs for pod: $pod ---"
-            kubectl logs $pod --all-containers=true
-          done
-          
-      - name: Test endpoints
+      
+      - name: Test application
         run: |
           POD_NAME=$(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/ | grep -q "Hello World" && echo "✅ Main page OK"
-          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK" && echo "✅ Health check OK"
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/ | grep -q "Hello World"
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK"
+          echo "✅ kubectl deployment tests passed"
+      
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "=== Deployment Status ==="
+          kubectl get pods,svc,ingress -l app=nginx-hello
+          echo "=== Pod Logs ==="
+          kubectl logs -l app=nginx-hello --all-containers=true
+
+  test-helm:
+    name: Test Kubernetes (Helm)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+      
+      - name: Load Docker image
+        run: gunzip -c image.tar.gz | docker load
+      
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}-helm
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: '3.14.4'
+      
+      - name: Setup nginx-ingress
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=180s
+      
+      - name: Deploy with Helm
+        run: |
+          kind load docker-image ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} --name ${{ env.CLUSTER_NAME }}-helm
+          helm upgrade --install nginx-hello-test helm/nginx-hello/ \
+            --set image.repository=${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --set image.pullPolicy=Never \
+            --wait --timeout=${{ env.HELM_TIMEOUT }}
+      
+      - name: Test Helm deployment
+        run: |
+          kubectl get pods -l app.kubernetes.io/name=nginx-hello
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-hello --timeout=60s
+          
+          POD_NAME=$(kubectl get pods -l app.kubernetes.io/name=nginx-hello -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/ | grep -q "Hello World"
+          kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK"
+          echo "✅ Helm deployment tests passed"
+      
+      - name: Test Helm status
+        run: |
+          helm status nginx-hello-test
+          helm list
+      
+      - name: Cleanup
+        if: always()
+        run: helm uninstall nginx-hello-test || true
+      
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "=== Helm Status ==="
+          helm status nginx-hello-test || true
+          echo "=== Resources ==="
+          kubectl get pods,svc,ingress -l app.kubernetes.io/name=nginx-hello
+          echo "=== Pod Logs ==="
+          kubectl logs -l app.kubernetes.io/name=nginx-hello --all-containers=true
 
   security:
+    name: Security Scan
     runs-on: ubuntu-latest
-    needs: test
+    needs: build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: Build image for security scan
-        run: docker build -t nginx-hello:test .
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
       
-      - name: Security scan
+      - name: Load Docker image
+        run: gunzip -c image.tar.gz | docker load
+      
+      - name: Run security scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: nginx-hello:test
-          format: 'table'
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

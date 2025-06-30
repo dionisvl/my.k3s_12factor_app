@@ -37,7 +37,7 @@ NGINX_WORKER_CONNECTIONS=2048
 ## Quick Start
 
 ### Prerequisites
-Docker Desktop, Make, Kind
+Docker Desktop, Make, Kind, Helm
 
 ### Development
 ```bash
@@ -50,6 +50,14 @@ make test                 # Run tests
 make k8s-cluster          # Create kind cluster
 make k8s-deploy           # Deploy application
 make k8s-config-prod      # Switch to production config
+```
+
+### Helm Deployment (Recommended)
+```bash
+make k8s-cluster          # Create kind cluster
+make helm-deploy          # Deploy with Helm (local)
+make helm-deploy-prod     # Deploy with Helm (production)
+make helm-status          # Check deployment status
 ```
 
 ### Manual Docker
@@ -96,14 +104,7 @@ kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
 - `/` - Main page
 - `/health` - Health check (returns "OK")
 
-## CI/CD
 
-- **Test**: Build, runtime, Kubernetes deployment with kubectl exec
-- **Security**: Trivy vulnerability scanning
-
-```bash
-make ci-test              # Run CI tests locally
-```
 
 ## Common Commands
 
@@ -114,10 +115,15 @@ make test / make clean
 
 # Kubernetes  
 make k8s-status           # Show pods, service, ingress
-make k8s-ingress-setup    # Install nginx-ingress controller
 kubectl get pods -l app=nginx-hello
 kubectl get ingress nginx-hello-ingress
 kubectl scale deployment nginx-hello --replicas=3
+
+# Helm
+make helm-deploy          # Deploy with Helm (local)
+make helm-deploy-prod     # Deploy with Helm (production)
+make helm-status          # Show Helm deployment status
+make helm-destroy         # Uninstall Helm deployment
 
 # Configuration
 make k8s-config-local     # localhost domains

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: nginx-hello
+description: A Helm chart for nginx-hello application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - nginx
+  - web
+  - microservice
+home: https://github.com/dionisvl/my.k8s_12factor_app
+maintainers:
+  - name: Mega Team
+    email: dionisvl3@gmail.com
