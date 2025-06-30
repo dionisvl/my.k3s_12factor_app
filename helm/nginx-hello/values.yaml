@@ -15,21 +15,16 @@ ingress:
   className: "nginx"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-  hosts:
-    - host: site-r1.local
-      paths:
-        - path: /
-          pathType: Prefix
-    - host: site-r2.local
-      paths:
-        - path: /
-          pathType: Prefix
+  hosts: []  # Will be populated from environment variables
   tls: []
 
 config:
   nginxPort: "8080"
-  nginxServerName: "localhost site-r1.local site-r2.local"
   nginxWorkerConnections: "1024"
+  domains:
+    - "localhost"
+    - "site-r1.local"
+    - "site-r2.local"
 
 resources:
   limits:
@@ -72,3 +67,8 @@ appLabels:
   version: v1.0.0
 
 environment: local
+
+# Simple domain configuration
+domain1: "localhost"
+domain2: "site-r1.local"
+domain3: "site-r2.local"

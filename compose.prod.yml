@@ -1,0 +1,13 @@
+services:
+  nginx:
+    build: .
+    ports:
+      - "${NGINX_PORT:-8080}:${NGINX_PORT:-8080}"
+    container_name: nginx_hello_prod
+    environment:
+      - NGINX_PORT=${NGINX_PORT:-8080}
+      - NGINX_WORKER_CONNECTIONS=${NGINX_WORKER_CONNECTIONS:-2048}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    env_file:
+      - .env.prod
+    restart: unless-stopped

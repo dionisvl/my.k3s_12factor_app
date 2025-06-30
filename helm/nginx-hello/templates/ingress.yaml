@@ -22,8 +22,22 @@ spec:
         {{- end }}
       secretName: {{ .secretName }}
     {{- end }}
+  {{- else if and .Values.tls .Values.tls.enabled }}
+  tls:
+    - hosts:
+        {{- if .Values.domain1 }}
+        - {{ .Values.domain1 | quote }}
+        {{- end }}
+        {{- if .Values.domain2 }}
+        - {{ .Values.domain2 | quote }}
+        {{- end }}
+        {{- if .Values.domain3 }}
+        - {{ .Values.domain3 | quote }}
+        {{- end }}
+      secretName: {{ .Values.tls.secretName }}
   {{- end }}
   rules:
+    {{- if .Values.ingress.hosts }}
     {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
@@ -37,5 +51,43 @@ spec:
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
+    {{- end }}
+    {{- else }}
+    {{- if .Values.domain1 }}
+    - host: {{ .Values.domain1 | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "nginx-hello.fullname" . }}-service
+                port:
+                  number: {{ .Values.service.port }}
+    {{- end }}
+    {{- if .Values.domain2 }}
+    - host: {{ .Values.domain2 | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "nginx-hello.fullname" . }}-service
+                port:
+                  number: {{ .Values.service.port }}
+    {{- end }}
+    {{- if .Values.domain3 }}
+    - host: {{ .Values.domain3 | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "nginx-hello.fullname" . }}-service
+                port:
+                  number: {{ .Values.service.port }}
+    {{- end }}
     {{- end }}
 {{- end }}

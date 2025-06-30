@@ -7,5 +7,5 @@ metadata:
     environment: {{ .Values.environment }}
 data:
   NGINX_PORT: {{ .Values.config.nginxPort | quote }}
-  NGINX_SERVER_NAME: {{ .Values.config.nginxServerName | quote }}
+  NGINX_SERVER_NAME: "{{ .Values.domain1 | default "localhost" }}{{- if .Values.domain2 }} {{ .Values.domain2 }}{{- end }}{{- if .Values.domain3 }} {{ .Values.domain3 }}{{- end }}"
   NGINX_WORKER_CONNECTIONS: {{ .Values.config.nginxWorkerConnections | quote }}

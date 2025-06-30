@@ -4,12 +4,14 @@ metadata:
   name: nginx-hello-ingress
   labels:
     app: nginx-hello
+    environment: "${ENVIRONMENT}"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
-  - host: site-r1.local
+  # Default local domains - can be overridden with envsubst
+  - host: "${DOMAIN_1}"
     http:
       paths:
       - path: /
@@ -19,7 +21,7 @@ spec:
             name: nginx-hello-service
             port:
               number: 8080
-  - host: site-r2.local
+  - host: "${DOMAIN_2}"
     http:
       paths:
       - path: /
@@ -39,10 +41,16 @@ metadata:
     environment: production
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - "${DOMAIN_1}"
+    - "${DOMAIN_2}"
+    secretName: nginx-hello-tls
   rules:
-  - host: example.com
+  - host: "${DOMAIN_1}"
     http:
       paths:
       - path: /
@@ -52,7 +60,7 @@ spec:
             name: nginx-hello-service
             port:
               number: 8080
-  - host: www.example.com
+  - host: "${DOMAIN_2}"
     http:
       paths:
       - path: /

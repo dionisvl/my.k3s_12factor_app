@@ -16,8 +16,15 @@ dev:
 	@echo "$(GREEN)Starting development...$(RESET)"
 	docker compose up -d
 
+dev-prod:
+	@echo "$(GREEN)Starting production environment...$(RESET)"
+	docker compose -f compose.prod.yml up -d
+
 dev-stop:
 	docker compose down
+
+dev-prod-stop:
+	docker compose -f compose.prod.yml down
 
 dev-logs:
 	docker compose logs -f
@@ -62,9 +69,9 @@ k8s-load: build
 
 k8s-deploy: k8s-load
 	@echo "$(GREEN)Deploying to Kubernetes...$(RESET)"
-	kubectl apply -f k8s/configmap.yaml
+	envsubst < k8s/configmap.yaml | kubectl apply -f -
 	kubectl apply -f k8s/k8s-deployment.yaml
-	kubectl apply -f k8s/ingress.yaml
+	envsubst < k8s/ingress.yaml | kubectl apply -f -
 
 helm-deploy: k8s-load ## Deploy using Helm (local environment)
 	@echo "$(GREEN)Deploying with Helm (local)...$(RESET)"
@@ -75,11 +82,11 @@ helm-deploy-prod: k8s-load ## Deploy using Helm (production environment)
 	helm upgrade --install nginx-hello helm/nginx-hello/ -f helm/nginx-hello/values-prod.yaml --create-namespace --namespace default
 
 k8s-config-local:
-	kubectl apply -f k8s/configmap.yaml
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k8s/configmap.yaml | kubectl apply -f -
 	kubectl rollout restart deployment nginx-hello
 
 k8s-config-prod:
-	kubectl apply -f k8s/configmap-prod.yaml
+	DOMAIN_1="example.com" DOMAIN_2="www.example.com" DOMAIN_3="api.example.com" envsubst < k8s/configmap-prod.yaml | kubectl apply -f -
 	kubectl rollout restart deployment nginx-hello
 
 k8s-test:

@@ -19,19 +19,62 @@ Production-ready nginx application with Kubernetes deployment and CI/CD.
 | Variable                   | Local                            | Production                                    |
 |----------------------------|----------------------------------|-----------------------------------------------|
 | `NGINX_PORT`               | `8080`                           | `8080`                                        |
-| `NGINX_SERVER_NAME`        | `localhost site-r1.local site-r2.local` | `example.com www.example.com api.example.com` |
 | `NGINX_WORKER_CONNECTIONS` | `1024`                           | `2048`                                        |
+| `DOMAIN_1`                 | `localhost`                      | `example.com`                                |
+| `DOMAIN_2`                 | `site-r1.local`                  | `www.example.com`                            |
+| `DOMAIN_3`                 | `site-r2.local`                  | `api.example.com` (optional)                |
+| `ENVIRONMENT`              | `local`                          | `production`                                  |
+
+### Environment Files
 
 ```bash
-# .env (local)
+# .env (local development)
 NGINX_PORT=8080
-NGINX_SERVER_NAME=localhost site-r1.local site-r2.local
 NGINX_WORKER_CONNECTIONS=1024
+NGINX_APP_VERSION=v1.0.2
+ENVIRONMENT=local
+
+# Simple domain configuration
+DOMAIN_1=localhost
+DOMAIN_2=site-r1.local
+DOMAIN_3=site-r2.local
 
 # .env.prod (production)  
 NGINX_PORT=8080
-NGINX_SERVER_NAME=example.com www.example.com api.example.com
 NGINX_WORKER_CONNECTIONS=2048
+NGINX_APP_VERSION=v1.0.2
+ENVIRONMENT=production
+
+# Simple domain configuration
+DOMAIN_1=example.com
+DOMAIN_2=www.example.com
+```
+
+### Customizing Domains
+
+To customize domains for your deployment:
+
+**For Docker Compose:**
+```bash
+# Local development
+DOMAIN_1=my-local.dev DOMAIN_2=api-local.dev make dev
+
+# Production
+cp .env.prod.example .env.prod
+# Edit .env.prod with your domains
+make dev-prod
+```
+
+**For Kubernetes:**
+```bash
+# Using environment variables
+export DOMAIN_1="my-app.com" DOMAIN_2="www.my-app.com"
+make k8s-deploy
+
+# Using Helm with custom values
+helm upgrade --install nginx-hello helm/nginx-hello/ \
+  --set domain1=my-app.com \
+  --set domain2=www.my-app.com
 ```
 
 ## Quick Start
@@ -110,7 +153,8 @@ kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
 
 ```bash
 # Development
-make dev / make dev-stop
+make dev / make dev-stop         # Local development environment  
+make dev-prod / make dev-prod-stop # Production-like environment
 make test / make clean
 
 # Kubernetes  

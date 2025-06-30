@@ -6,7 +6,7 @@ services:
     container_name: nginx_hello
     environment:
       - NGINX_PORT=${NGINX_PORT:-8080}
-      - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
       - NGINX_WORKER_CONNECTIONS=${NGINX_WORKER_CONNECTIONS:-1024}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
     env_file:
       - .env

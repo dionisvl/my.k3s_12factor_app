@@ -12,24 +12,23 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  hosts:
-    - host: my-web3.site
-      paths:
-        - path: /
-          pathType: Prefix
-    - host: www.my-web3.site
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: nginx-hello-tls
-      hosts:
-        - my-web3.site
-        - www.my-web3.site
+  hosts: []  # Will be populated from environment variables
+  tls: []     # Will be populated from environment variables
 
 config:
-  nginxServerName: "my-web3.site www.my-web3.site"
   nginxWorkerConnections: "2048"
+  domains:
+    - "example.com"
+    - "www.example.com"
+
+# Override domains for production
+domain1: "example.com"
+domain2: "www.example.com"
+
+# TLS configuration for production
+tls:
+  enabled: true
+  secretName: "nginx-hello-tls"
 
 resources:
   limits:
