@@ -16,65 +16,30 @@ Production-ready nginx application with Kubernetes deployment and CI/CD.
 
 ## Configuration
 
-| Variable                   | Local                            | Production                                    |
-|----------------------------|----------------------------------|-----------------------------------------------|
-| `NGINX_PORT`               | `8080`                           | `8080`                                        |
-| `NGINX_WORKER_CONNECTIONS` | `1024`                           | `2048`                                        |
-| `DOMAIN_1`                 | `localhost`                      | `example.com`                                |
-| `DOMAIN_2`                 | `site-r1.local`                  | `www.example.com`                            |
-| `DOMAIN_3`                 | `site-r2.local`                  | `api.example.com` (optional)                |
-| `ENVIRONMENT`              | `local`                          | `production`                                  |
-
-### Environment Files
-
 ```bash
-# .env (local development)
 NGINX_PORT=8080
 NGINX_WORKER_CONNECTIONS=1024
 NGINX_APP_VERSION=v1.0.2
 ENVIRONMENT=local
 
-# Simple domain configuration
 DOMAIN_1=localhost
 DOMAIN_2=site-r1.local
 DOMAIN_3=site-r2.local
-
-# .env.prod (production)  
-NGINX_PORT=8080
-NGINX_WORKER_CONNECTIONS=2048
-NGINX_APP_VERSION=v1.0.2
-ENVIRONMENT=production
-
-# Simple domain configuration
-DOMAIN_1=example.com
-DOMAIN_2=www.example.com
 ```
 
-### Customizing Domains
+### Custom Domains
 
-To customize domains for your deployment:
-
-**For Docker Compose:**
 ```bash
-# Local development
-DOMAIN_1=my-local.dev DOMAIN_2=api-local.dev make dev
+# Docker Compose
+DOMAIN_1=my-app.com DOMAIN_2=www.my-app.com make dev
 
-# Production
-cp .env.prod.example .env.prod
-# Edit .env.prod with your domains
-make dev-prod
-```
-
-**For Kubernetes:**
-```bash
-# Using environment variables
+# Kubernetes
 export DOMAIN_1="my-app.com" DOMAIN_2="www.my-app.com"
 make k8s-deploy
 
-# Using Helm with custom values
+# Helm  
 helm upgrade --install nginx-hello helm/nginx-hello/ \
-  --set domain1=my-app.com \
-  --set domain2=www.my-app.com
+  --set domain1=my-app.com --set domain2=www.my-app.com
 ```
 
 ## Quick Start
@@ -109,20 +74,13 @@ docker compose up -d
 curl http://localhost:8080
 ```
 
-### Access Methods
+### Access
 
-**Via Ingress (recommended):**
 ```bash
-# Local development
+# Ingress
 curl -H "Host: site-r1.local" http://localhost/
-curl -H "Host: site-r2.local" http://localhost/
 
-# Production  
-curl https://example.com/
-```
-
-**Via NodePort (testing only):**
-```bash
+# NodePort  
 curl http://localhost:30080/
 ```
 
@@ -153,29 +111,25 @@ kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
 
 ```bash
 # Development
-make dev / make dev-stop         # Local development environment  
-make dev-prod / make dev-prod-stop # Production-like environment
+make dev / make dev-stop
+make dev-prod / make dev-prod-stop  
 make test / make clean
 
-# Kubernetes  
-make k8s-status           # Show pods, service, ingress
+# Kubernetes
+make k8s-status
 kubectl get pods -l app=nginx-hello
-kubectl get ingress nginx-hello-ingress
 kubectl scale deployment nginx-hello --replicas=3
 
 # Helm
-make helm-deploy          # Deploy with Helm (local)
-make helm-deploy-prod     # Deploy with Helm (production)
-make helm-status          # Show Helm deployment status
-make helm-destroy         # Uninstall Helm deployment
+make helm-deploy / make helm-deploy-prod
+make helm-status / make helm-destroy
 
-# Configuration
-make k8s-config-local     # localhost domains
-make k8s-config-prod      # production domains
+# Configuration  
+make k8s-config-local / make k8s-config-prod
 
-# Testing Ingress
+# Testing
 curl -H "Host: site-r1.local" http://localhost/
-curl -H "Host: site-r2.local" http://localhost/health
+curl -H "Host: site-r1.local" http://localhost/health
 ```
 
 ## Troubleshooting

@@ -14,11 +14,11 @@ participant "nginx Pod 2" as NP2
 participant "nginx-hello-service" as SVC
 
 == Build & Load Image ==
-D -> D: docker build -t nginx_hello-nginx:latest .\n(with envsubst support & templates)
+D -> D: docker build -t nginx_hello-nginx:latest .\n(with DOMAIN_1/2/3 support)
 D -> KC: kind load docker-image nginx_hello-nginx:latest
 
 == Deployment Creation ==
-D -> K: kubectl apply -f k8s/configmap.yaml
+D -> K: DOMAIN_1="localhost" DOMAIN_2="site-r1.local" envsubst < k8s/configmap.yaml | kubectl apply -f -
 D -> K: kubectl apply -f k8s/k8s-deployment.yaml
 K -> API: Create ConfigMap, Deployment & Service
 API -> CM: Watch Deployment (replicas: 2)
@@ -31,8 +31,8 @@ API -> KL: Create Pod nginx-hello-2
 == Pod Initialization ==
 KL -> NP1: Start nginx container (non-root user:101)
 KL -> NP2: Start nginx container (non-root user:101)
-NP1 -> NP1: Read env vars from ConfigMap\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nSetup /tmp cache directories\nServe src/html/index.html\nSetup /health endpoint
-NP2 -> NP2: Read env vars from ConfigMap\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nSetup /tmp cache directories\nServe src/html/index.html\nSetup /health endpoint
+NP1 -> NP1: Read DOMAIN_1/2/3 from ConfigMap\nBuild NGINX_SERVER_NAME in entrypoint.sh\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nServe src/html/index.html & /health endpoint
+NP2 -> NP2: Read DOMAIN_1/2/3 from ConfigMap\nBuild NGINX_SERVER_NAME in entrypoint.sh\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nServe src/html/index.html & /health endpoint
 
 == Health Checks ==
 KL -> NP1: Readiness Probe GET /health
@@ -81,12 +81,12 @@ loop Every 10 seconds (Liveness) / 5 seconds (Readiness)
 end
 
 == Configuration Update ==
-D -> K: kubectl patch configmap nginx-config --patch '{"data":{"NGINX_WORKER_CONNECTIONS":"2048"}}'
+D -> K: DOMAIN_1="example.com" DOMAIN_2="www.example.com" envsubst < k8s/configmap-prod.yaml | kubectl apply -f -
 D -> K: kubectl rollout restart deployment nginx-hello
-K -> API: Update ConfigMap
+K -> API: Update ConfigMap with new domains
 K -> API: Restart deployment
 API -> KL: Rolling restart pods
-note over D, KL: New pods pick up updated worker connections
+note over D, KL: New pods pick up production domains
 
 == Scaling Test ==
 D -> K: kubectl scale deployment nginx-hello --replicas=1
