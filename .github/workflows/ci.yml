@@ -96,7 +96,7 @@ jobs:
           k3d image import ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -c test-cluster
           export DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local"
           envsubst < k3s/configmap.yaml | kubectl apply -f -
-          sed 's/nginx_hello-nginx:latest/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}/g' k3s/k3s-deployment.yaml | kubectl apply -f -
+          sed 's/nginx_hello-nginx:latest/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}/g' k3s/k8s-deployment.yaml | kubectl apply -f -
       
       - name: Wait for deployment
         run: |

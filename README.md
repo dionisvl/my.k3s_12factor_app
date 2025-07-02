@@ -1,4 +1,4 @@
-# Nginx Hello World k3s Project
+# K3s Nginx Hello World Project
 
 ![CI/CD](https://github.com/dionisvl/my.k8s_12factor_app/workflows/CI/badge.svg)
 ![Version](https://img.shields.io/badge/version-v1.0.2-blue)
