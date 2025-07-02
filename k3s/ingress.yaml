@@ -6,9 +6,9 @@ metadata:
     app: nginx-hello
     environment: "${ENVIRONMENT}"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    traefik.ingress.kubernetes.io/rewrite-target: /
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
   # Default local domains - can be overridden with envsubst
   - host: "${DOMAIN_1}"
@@ -40,10 +40,10 @@ metadata:
     app: nginx-hello
     environment: production
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    traefik.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
   - hosts:
     - "${DOMAIN_1}"

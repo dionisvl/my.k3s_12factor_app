@@ -1,25 +1,25 @@
-@startuml Kubernetes Nginx Hello World Sequence (Enhanced)
+@startuml k3s Nginx Hello World Sequence (Enhanced)
 !theme plain
 
 actor Developer as D
 participant "kubectl" as K
-participant "Kind Cluster" as KC
+participant "k3s Cluster" as K3S
+participant "Traefik Ingress" as TI
 participant "API Server" as API
 participant "Controller Manager" as CM
 participant "Scheduler" as S
 participant "Kubelet" as KL
-participant "kube-proxy" as KP
 participant "nginx Pod 1" as NP1
 participant "nginx Pod 2" as NP2
 participant "nginx-hello-service" as SVC
 
 == Build & Load Image ==
 D -> D: docker build -t nginx_hello-nginx:latest .\n(with DOMAIN_1/2/3 support)
-D -> KC: kind load docker-image nginx_hello-nginx:latest
+D -> K3S: docker save | k3s ctr images import -
 
 == Deployment Creation ==
-D -> K: DOMAIN_1="localhost" DOMAIN_2="site-r1.local" envsubst < k8s/configmap.yaml | kubectl apply -f -
-D -> K: kubectl apply -f k8s/k8s-deployment.yaml
+D -> K: DOMAIN_1="localhost" DOMAIN_2="site-r1.local" envsubst < k3s/configmap.yaml | kubectl apply -f -
+D -> K: kubectl apply -f k3s/k3s-deployment.yaml
 K -> API: Create ConfigMap, Deployment & Service
 API -> CM: Watch Deployment (replicas: 2)
 CM -> API: Create ReplicaSet
@@ -81,7 +81,7 @@ loop Every 10 seconds (Liveness) / 5 seconds (Readiness)
 end
 
 == Configuration Update ==
-D -> K: DOMAIN_1="example.com" DOMAIN_2="www.example.com" envsubst < k8s/configmap-prod.yaml | kubectl apply -f -
+D -> K: DOMAIN_1="example.com" DOMAIN_2="www.example.com" envsubst < k3s/configmap-prod.yaml | kubectl apply -f -
 D -> K: kubectl rollout restart deployment nginx-hello
 K -> API: Update ConfigMap with new domains
 K -> API: Restart deployment
@@ -98,15 +98,22 @@ K -> API: Update replicas
 API -> KL: Create new Pod nginx-hello-3
 note over D, KL: Rolling update ensures zero downtime
 
-== Alternative: Direct NodePort Access ==
-note over D, SVC: Alternative access method
-D -> KC: HTTP Request to NodePort 30080
-KC -> KP: Route via iptables
-KP -> SVC: Forward to Service
+== Ingress Access via Traefik ==
+note over D, TI: Primary access method through Traefik
+D -> TI: HTTP Request to site-r1.local
+TI -> TI: Route based on Host header\ntraefik.ingress.kubernetes.io rules
+TI -> SVC: Forward to nginx-hello-service
 SVC -> NP1: Load balance to available Pod
-NP1 -> SVC: HTTP Response
-SVC -> KP: Return response
-KP -> KC: Route back
-KC -> D: Response content
+NP1 -> SVC: HTTP Response (nginx serves static files)
+SVC -> TI: Return response
+TI -> D: Response content
+
+== Alternative: Direct Service Access ==
+note over D, SVC: Alternative access method
+D -> K3S: kubectl port-forward svc/nginx-hello-service 8082:8080
+K3S -> SVC: Direct service access
+SVC -> NP2: Forward to nginx Pod
+NP2 -> SVC: HTTP Response
+SVC -> D: Response content
 
 @enduml

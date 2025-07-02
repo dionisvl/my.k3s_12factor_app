@@ -3,7 +3,7 @@ replicaCount: 2
 
 image:
   repository: nginx_hello-nginx
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
   tag: "latest"
 
 service:
@@ -12,9 +12,9 @@ service:
 
 ingress:
   enabled: true
-  className: "nginx"
+  className: "traefik"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    traefik.ingress.kubernetes.io/rewrite-target: /
   hosts: []  # Will be populated from environment variables
   tls: []
 

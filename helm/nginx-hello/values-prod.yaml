@@ -8,9 +8,9 @@ image:
 
 ingress:
   enabled: true
-  className: "nginx"
+  className: "traefik"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    traefik.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts: []  # Will be populated from environment variables
   tls: []     # Will be populated from environment variables

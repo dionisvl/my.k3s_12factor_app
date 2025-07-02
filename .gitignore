@@ -19,5 +19,6 @@ Thumbs.db
 *~
 coverage/
 .nyc_output/
-kubeconfig
-*.kubeconfig
+# Kubernetes configs (project-specific)
+kubeconfig*.yaml
+!kubeconfig-example.yaml

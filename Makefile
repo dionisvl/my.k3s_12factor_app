@@ -2,43 +2,31 @@
 
 IMAGE_NAME ?= nginx_hello-nginx
 IMAGE_TAG ?= latest
-CLUSTER_NAME ?= hello-cluster
 
 BLUE := \033[36m
 GREEN := \033[32m
 RESET := \033[0m
 
-help:
+help: ## Show available commands
 	@echo "$(BLUE)Available commands:$(RESET)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-15s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
 
-dev:
-	@echo "$(GREEN)Starting development...$(RESET)"
+up:
 	docker compose up -d
 
-dev-prod:
-	@echo "$(GREEN)Starting production environment...$(RESET)"
-	docker compose -f compose.prod.yml up -d
-
-dev-stop:
+down:
 	docker compose down
-
-dev-prod-stop:
-	docker compose -f compose.prod.yml down
-
-dev-logs:
-	docker compose logs -f
 
 build:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
 test: test-build test-run
 
-test-build:
+test-build: ## Test Docker build
 	@echo "$(GREEN)Testing build...$(RESET)"
 	docker build -t $(IMAGE_NAME):test .
 
-test-run:
+test-run: ## Test application runtime
 	@echo "$(GREEN)Testing runtime...$(RESET)"
 	@docker rm -f nginx-test 2>/dev/null || true
 	@docker run -d --name nginx-test -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
@@ -47,7 +35,7 @@ test-run:
 	@curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
 	@docker stop nginx-test && docker rm nginx-test
 
-test-custom-config:
+test-custom-config: ## Test custom configuration
 	@echo "$(GREEN)Testing custom config...$(RESET)"
 	@docker rm -f nginx-test-custom 2>/dev/null || true
 	docker run -d --name nginx-test-custom -p 8081:8081 \
@@ -57,72 +45,89 @@ test-custom-config:
 	@curl -f http://localhost:8081/ | grep -q "Hello World" && echo "$(GREEN)✅ Custom config OK$(RESET)"
 	@docker stop nginx-test-custom && docker rm nginx-test-custom
 
-k8s-cluster: ## Create Kind cluster and install ingress controller
-	@kind get clusters | grep -q $(CLUSTER_NAME) || kind create cluster --name $(CLUSTER_NAME)
-	@echo "$(GREEN)Installing nginx-ingress controller...$(RESET)"
-	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-	@echo "$(GREEN)Waiting for ingress controller to be ready...$(RESET)"
-	@kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+# k3d (Recommended - Isolated)
+k3d-cluster-isolated: ## Create isolated k3d cluster for this project
+	@echo "$(GREEN)Creating isolated k3d cluster...$(RESET)"
+	k3d cluster create hello-world-cluster --api-port 127.0.0.1:6443 --servers 1 --agents 0 --port 8080:80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
+	@k3d kubeconfig get hello-world-cluster > kubeconfig-hello-world.yaml
+	@echo "$(GREEN)Isolated cluster created!$(RESET)"
+	@echo "$(BLUE)To use: source scripts/k8s-env.sh$(RESET)"
 
-k8s-load: build
-	kind load docker-image $(IMAGE_NAME):$(IMAGE_TAG) --name $(CLUSTER_NAME)
+k3d-load-isolated: build ## Load Docker image into isolated cluster
+	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-world-cluster
 
-k8s-deploy: k8s-load
-	@echo "$(GREEN)Deploying to Kubernetes...$(RESET)"
-	envsubst < k8s/configmap.yaml | kubectl apply -f -
-	kubectl apply -f k8s/k8s-deployment.yaml
-	envsubst < k8s/ingress.yaml | kubectl apply -f -
+k3d-deploy-isolated: k3d-load-isolated ## Deploy to isolated cluster
+	@echo "$(GREEN)Deploying to isolated k3d cluster...$(RESET)"
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f k3s/k8s-deployment.yaml
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
 
-helm-deploy: k8s-load ## Deploy using Helm (local environment)
-	@echo "$(GREEN)Deploying with Helm (local)...$(RESET)"
+k3d-test-isolated: ## Test isolated cluster deployment
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
+	@echo "$(GREEN)Testing LoadBalancer at http://localhost:8080$(RESET)"
+	@curl -f http://localhost:8080/ | grep -q "Hello World" && echo "$(GREEN)✅ LoadBalancer test OK$(RESET)"
+	@curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
+
+k3d-status-isolated: ## Show isolated cluster status
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get pods -l app=nginx-hello
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get svc nginx-hello-service
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get ingress
+
+k3d-destroy-isolated: ## Destroy isolated cluster and clean up
+	@echo "$(GREEN)Destroying isolated cluster...$(RESET)"
+	k3d cluster delete hello-world-cluster 2>/dev/null || true
+	@rm -f kubeconfig-hello-world.yaml
+	@echo "$(GREEN)Cleanup complete!$(RESET)"
+
+# k3d (Legacy - Uses system kubeconfig)
+k3d-cluster: ## Create k3d cluster (uses system kubeconfig)
+	@echo "$(GREEN)Creating k3d cluster...$(RESET)"
+	k3d cluster create hello-cluster --api-port 127.0.0.1:6443 --servers 1 --agents 0 --port 8080:80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
+	@echo "$(GREEN)Waiting for cluster to be ready...$(RESET)"
+	kubectl wait --for=condition=ready nodes --all --timeout=60s
+	@echo "$(GREEN)Cluster ready! Traefik ingress is enabled by default.$(RESET)"
+
+k3d-load: build ## Load Docker image into k3d cluster
+	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-cluster
+
+k3d-deploy: k3d-load ## Deploy to k3d cluster
+	@echo "$(GREEN)Deploying to k3d...$(RESET)"
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl apply -f -
+	kubectl apply -f k3s/k8s-deployment.yaml
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress.yaml | kubectl apply -f -
+
+k3d-destroy: ## Destroy k3d cluster
+	@echo "$(GREEN)Destroying k3d cluster...$(RESET)"
+	k3d cluster delete hello-cluster 2>/dev/null || true
+
+# Helm
+helm-deploy-isolated: k3d-load-isolated ## Deploy using Helm to isolated cluster
+	@echo "$(GREEN)Deploying with Helm to isolated cluster...$(RESET)"
+	helm --kubeconfig=./kubeconfig-hello-world.yaml upgrade --install nginx-hello helm/nginx-hello/ --create-namespace --namespace default
+
+helm-deploy: k3d-load ## Deploy using Helm (legacy)
+	@echo "$(GREEN)Deploying with Helm...$(RESET)"
 	helm upgrade --install nginx-hello helm/nginx-hello/ --create-namespace --namespace default
 
-helm-deploy-prod: k8s-load ## Deploy using Helm (production environment)
+helm-deploy-prod: k3d-load ## Deploy using Helm (production)
 	@echo "$(GREEN)Deploying with Helm (production)...$(RESET)"
 	helm upgrade --install nginx-hello helm/nginx-hello/ -f helm/nginx-hello/values-prod.yaml --create-namespace --namespace default
 
-k8s-config-local:
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k8s/configmap.yaml | kubectl apply -f -
-	kubectl rollout restart deployment nginx-hello
-
-k8s-config-prod:
-	DOMAIN_1="example.com" DOMAIN_2="www.example.com" DOMAIN_3="api.example.com" envsubst < k8s/configmap-prod.yaml | kubectl apply -f -
-	kubectl rollout restart deployment nginx-hello
-
-k8s-test:
-	kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
-	@echo "Testing via Ingress at http://site-r1.local"
-	@curl -H "Host: site-r1.local" http://localhost:80/ | grep -q "Hello World" && echo "$(GREEN)✅ Ingress test OK$(RESET)" || echo "$(GREEN)ℹ️  Ingress not ready, testing via port-forward$(RESET)"
-	@kubectl port-forward svc/nginx-hello-service 8082:8080 & sleep 3; curl -f http://localhost:8082/ | grep -q "Hello World" && echo "$(GREEN)✅ Service test OK$(RESET)"; pkill -f "kubectl port-forward" || true
-
-k8s-status:
-	kubectl get pods -l app=nginx-hello
-	kubectl get svc nginx-hello-service
-	kubectl get ingress nginx-hello-ingress
-
-k8s-destroy:
-	kubectl delete -f k8s/ingress.yaml 2>/dev/null || true
-	kubectl delete -f k8s/k8s-deployment.yaml 2>/dev/null || true
-	kubectl delete -f k8s/configmap.yaml 2>/dev/null || true
-	kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
-
-helm-destroy:
+helm-destroy: ## Uninstall Helm deployment
 	@echo "$(GREEN)Uninstalling Helm deployment...$(RESET)"
 	helm uninstall nginx-hello 2>/dev/null || true
 
-helm-status:
+helm-status: ## Show Helm deployment status
 	@echo "$(GREEN)Helm status:$(RESET)"
 	helm status nginx-hello 2>/dev/null || echo "No Helm deployment found"
 	@echo "$(GREEN)Kubernetes resources:$(RESET)"
 	kubectl get pods,svc,ingress -l app.kubernetes.io/name=nginx-hello 2>/dev/null || echo "No resources found"
 
-
-clean:
+# Cleanup
+clean: ## Clean up Docker containers and images
 	@docker rm -f nginx-test nginx-test-custom 2>/dev/null || true
 	@docker rmi $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):test 2>/dev/null || true
 
-deploy: k8s-cluster k8s-deploy k8s-test
-
-up: dev
-down: dev-stop
-status: k8s-status
+# Quick workflows
+deploy-isolated: k3d-cluster-isolated k3d-deploy-isolated k3d-test-isolated ## Full isolated deployment workflow
+deploy-legacy: k3d-cluster k3d-deploy ## Legacy deployment workflow
