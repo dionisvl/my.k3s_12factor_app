@@ -74,10 +74,15 @@ jobs:
         run: gunzip -c image.tar.gz | docker load
       
       - name: Setup k3s cluster
-        uses: debianmaster/actions-k3s@master
-        id: k3s
+        uses: AbsaOSS/k3d-action@v2
         with:
-          version: 'v1.21.3+k3s1'
+          cluster-name: "test-cluster"
+          args: >-
+            --api-port 6443
+            --servers 1
+            --agents 0
+            --port 8080:80@loadbalancer
+            --wait
       
       - name: Debug cluster state
         run: |
@@ -88,7 +93,7 @@ jobs:
       
       - name: Deploy application (without ingress)
         run: |
-          docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | sudo k3s ctr images import -
+          k3d image import ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -c test-cluster
           export DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local"
           envsubst < k3s/configmap.yaml | kubectl apply -f -
           sed 's/nginx_hello-nginx:latest/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}/g' k3s/k3s-deployment.yaml | kubectl apply -f -
@@ -143,10 +148,15 @@ jobs:
         run: gunzip -c image.tar.gz | docker load
       
       - name: Setup k3s cluster
-        uses: debianmaster/actions-k3s@master
-        id: k3s
+        uses: AbsaOSS/k3d-action@v2
         with:
-          version: 'v1.21.3+k3s1'
+          cluster-name: "test-cluster"
+          args: >-
+            --api-port 6443
+            --servers 1
+            --agents 0
+            --port 8080:80@loadbalancer
+            --wait
       
       - name: Install Helm
         uses: azure/setup-helm@v4.2.0
@@ -155,7 +165,7 @@ jobs:
       
       - name: Deploy with Helm (no ingress)
         run: |
-          docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | sudo k3s ctr images import -
+          k3d image import ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -c test-cluster
           helm upgrade --install nginx-hello-test helm/nginx-hello/ \
             --set image.repository=${{ env.IMAGE_NAME }} \
             --set image.tag=${{ env.IMAGE_TAG }} \
