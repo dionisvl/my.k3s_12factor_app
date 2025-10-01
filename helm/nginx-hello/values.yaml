@@ -68,7 +68,4 @@ appLabels:
 
 environment: local
 
-# Simple domain configuration
-domain1: "localhost"
-domain2: "site-r1.local"
-domain3: "site-r2.local"
+# Domain configuration consolidated in config.domains list

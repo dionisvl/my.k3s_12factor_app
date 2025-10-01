@@ -49,3 +49,10 @@ Selector labels
 app.kubernetes.io/name: {{ include "nginx-hello.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Generate NGINX server names from domains list
+*/}}
+{{- define "nginx-hello.serverName" -}}
+{{- join " " .Values.config.domains }}
+{{- end }}

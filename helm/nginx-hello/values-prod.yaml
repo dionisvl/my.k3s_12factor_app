@@ -21,10 +21,6 @@ config:
     - "example.com"
     - "www.example.com"
 
-# Override domains for production
-domain1: "example.com"
-domain2: "www.example.com"
-
 # TLS configuration for production
 tls:
   enabled: true

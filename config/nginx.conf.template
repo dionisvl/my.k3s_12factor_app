@@ -8,8 +8,8 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     
-    access_log /tmp/access.log;
-    error_log /tmp/error.log;
+    access_log /dev/stdout;
+    error_log /dev/stderr;
     
     client_body_temp_path /tmp/cache/nginx/client_temp;
     proxy_temp_path /tmp/cache/nginx/proxy_temp;

@@ -1,7 +1,12 @@
 .PHONY: help dev test clean deploy
 
 IMAGE_NAME ?= nginx_hello-nginx
-IMAGE_TAG ?= latest
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+IMAGE_TAG ?= $(GIT_COMMIT)
+
+# K3d configuration
+K3D_API_PORT ?= 6443
+K3D_LB_PORT ?= 8080
 
 BLUE := \033[36m
 GREEN := \033[32m
@@ -48,7 +53,7 @@ test-custom-config: ## Test custom configuration
 # k3d (Recommended - Isolated)
 k3d-cluster-isolated: ## Create isolated k3d cluster for this project
 	@echo "$(GREEN)Creating isolated k3d cluster...$(RESET)"
-	k3d cluster create hello-world-cluster --api-port 127.0.0.1:6443 --servers 1 --agents 0 --port 8080:80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
+	k3d cluster create hello-world-cluster --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
 	@k3d kubeconfig get hello-world-cluster > kubeconfig-hello-world.yaml
 	@echo "$(GREEN)Isolated cluster created!$(RESET)"
 	@echo "$(BLUE)To use: source scripts/k8s-env.sh$(RESET)"
@@ -60,13 +65,15 @@ k3d-deploy-isolated: k3d-load-isolated ## Deploy to isolated cluster
 	@echo "$(GREEN)Deploying to isolated k3d cluster...$(RESET)"
 	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f k3s/k8s-deployment.yaml
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress-dev.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
 
 k3d-test-isolated: ## Test isolated cluster deployment
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
-	@echo "$(GREEN)Testing LoadBalancer at http://localhost:8080$(RESET)"
-	@curl -f http://localhost:8080/ | grep -q "Hello World" && echo "$(GREEN)✅ LoadBalancer test OK$(RESET)"
-	@curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
+	@echo "$(GREEN)Testing pods directly...$(RESET)"
+	@POD_NAME=$$(kubectl --kubeconfig=./kubeconfig-hello-world.yaml get pod -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}'); \
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml exec $$POD_NAME -- curl -f http://localhost:8080/ | grep -q "Hello World" && echo "$(GREEN)✅ Main page OK$(RESET)"
+	@POD_NAME=$$(kubectl --kubeconfig=./kubeconfig-hello-world.yaml get pod -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}'); \
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml exec $$POD_NAME -- curl -f http://localhost:8080/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
 
 k3d-status-isolated: ## Show isolated cluster status
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get pods -l app=nginx-hello
@@ -82,7 +89,7 @@ k3d-destroy-isolated: ## Destroy isolated cluster and clean up
 # k3d (Legacy - Uses system kubeconfig)
 k3d-cluster: ## Create k3d cluster (uses system kubeconfig)
 	@echo "$(GREEN)Creating k3d cluster...$(RESET)"
-	k3d cluster create hello-cluster --api-port 127.0.0.1:6443 --servers 1 --agents 0 --port 8080:80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
+	k3d cluster create hello-cluster --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
 	@echo "$(GREEN)Waiting for cluster to be ready...$(RESET)"
 	kubectl wait --for=condition=ready nodes --all --timeout=60s
 	@echo "$(GREEN)Cluster ready! Traefik ingress is enabled by default.$(RESET)"
@@ -94,7 +101,7 @@ k3d-deploy: k3d-load ## Deploy to k3d cluster
 	@echo "$(GREEN)Deploying to k3d...$(RESET)"
 	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl apply -f -
 	kubectl apply -f k3s/k8s-deployment.yaml
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress.yaml | kubectl apply -f -
+	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress-dev.yaml | kubectl apply -f -
 
 k3d-destroy: ## Destroy k3d cluster
 	@echo "$(GREEN)Destroying k3d cluster...$(RESET)"

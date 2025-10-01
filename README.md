@@ -11,8 +11,18 @@ Production-ready nginx application with isolated k3d deployment.
 - Static HTML serving with `/health` endpoint
 - Multi-replica Kubernetes deployment with Ingress load balancing
 - Environment-based configuration (local/production)
+- Helm charts for production deployments
+- Configurable k3d ports for parallel development
+- Automated testing with pod-level health checks
 - CI/CD pipeline with testing and security scanning
 - Build automation with Makefile
+
+
+## Prerequisites
+
+- Docker Desktop
+- k3d: `brew install k3d`
+- kubectl, helm, make
 
 ## Quick Start
 
@@ -23,19 +33,60 @@ make test                  # Run tests
 
 # Kubernetes (Recommended)
 make k3d-cluster-isolated  # Create isolated cluster
-source scripts/k8s-env.sh  # Activate environment
+source scripts/k8s-env.sh  # Activate environment (bash/zsh/fish)
 make k3d-deploy-isolated   # Deploy application
-curl http://localhost:8080 # Test
+make k3d-test-isolated     # Test (automated)
 
 # Cleanup
 make k3d-destroy-isolated  # Clean everything
 ```
 
-## Prerequisites
+## Testing & Verification
 
-- Docker Desktop
-- k3d: `brew install k3d`
-- kubectl, helm, make
+### Docker Compose
+```bash
+make build && docker compose up -d
+docker ps | grep healthy              # Container health status
+curl localhost:8080                   # Main page
+curl localhost:8080/health            # Health endpoint
+docker logs nginx_hello               # Check logs
+```
+
+### Kubernetes (k3s)
+```bash
+# Deploy
+make k3d-cluster-isolated && source scripts/k8s-env.sh  # bash/zsh/fish
+make k3d-deploy-isolated
+
+# Verify deployment
+kubectl get pods -o wide              # Check READY 1/1 status
+kubectl get svc,ingress               # Check services
+kubectl logs -l app=nginx-hello       # Check application logs
+
+# Test application (automated)
+make k3d-test-isolated               # Runs health checks inside pods
+
+# Health checks verification
+kubectl describe pod -l app=nginx-hello | grep -A5 "Liveness\|Readiness"
+```
+
+### Helm Deployment
+```bash
+# Deploy with Helm
+make helm-deploy-isolated
+
+# Or with custom values
+helm upgrade --install nginx-hello helm/nginx-hello/ \
+  --set config.domains='{example.com,www.example.com}' \
+  --set image.tag=$(git rev-parse --short HEAD) \
+  --set image.pullPolicy=Never
+```
+
+### Custom Ports (Avoid Conflicts)
+```bash
+# Use different ports for parallel projects
+K3D_API_PORT=6444 K3D_LB_PORT=8081 make k3d-cluster-isolated
+```
 
 ## Project Isolation
 
@@ -45,10 +96,6 @@ Each project gets its own kubeconfig to prevent conflicts:
 source scripts/k8s-env.sh   # Isolate environment
 kubectl config get-contexts # Shows only this project
 ```
-
-## Available Commands
-
-Run `make help` to see all commands.
 
 ## Endpoints
 

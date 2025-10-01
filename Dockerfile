@@ -1,6 +1,6 @@
 FROM nginx:alpine
 
-RUN apk add --no-cache gettext
+RUN apk add --no-cache gettext curl
 
 COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
 COPY scripts/entrypoint.sh /entrypoint.sh
