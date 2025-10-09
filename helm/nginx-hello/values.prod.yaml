@@ -2,18 +2,15 @@
 replicaCount: 3
 
 image:
-  repository: nginx_hello-nginx
-  pullPolicy: IfNotPresent
-  tag: "latest"
+  pullPolicy: Never  # Use local images (like dev)
 
 ingress:
   enabled: true
   className: "traefik"
   annotations:
-    traefik.ingress.kubernetes.io/rewrite-target: /
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  hosts: []  # Will be populated from environment variables
-  tls: []     # Will be populated from environment variables
+    # Traefik will auto-generate SSL via Let's Encrypt
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: "letsencrypt"
 
 config:
   nginxWorkerConnections: "2048"
@@ -21,7 +18,7 @@ config:
     - "example.com"
     - "www.example.com"
 
-# TLS configuration for production
+# Traefik handles SSL automatically
 tls:
   enabled: true
   secretName: "nginx-hello-tls"

@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nginx-hello.fullname" . }}
+  name: nginx-hello
   labels:
-    {{- include "nginx-hello.labels" . | nindent 4 }}
+    app: nginx-hello
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -15,14 +15,11 @@ spec:
     {{- end }}
   selector:
     matchLabels:
-      {{- include "nginx-hello.selectorLabels" . | nindent 6 }}
+      app: nginx-hello
   template:
     metadata:
       labels:
-        {{- include "nginx-hello.selectorLabels" . | nindent 8 }}
-        {{- with .Values.appLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        app: nginx-hello
     spec:
       containers:
       - name: nginx
@@ -36,17 +33,17 @@ spec:
         - name: NGINX_PORT
           valueFrom:
             configMapKeyRef:
-              name: {{ include "nginx-hello.fullname" . }}-config
+              name: nginx-hello-config
               key: NGINX_PORT
         - name: NGINX_SERVER_NAME
           valueFrom:
             configMapKeyRef:
-              name: {{ include "nginx-hello.fullname" . }}-config
+              name: nginx-hello-config
               key: NGINX_SERVER_NAME
         - name: NGINX_WORKER_CONNECTIONS
           valueFrom:
             configMapKeyRef:
-              name: {{ include "nginx-hello.fullname" . }}-config
+              name: nginx-hello-config
               key: NGINX_WORKER_CONNECTIONS
         resources:
           {{- toYaml .Values.resources | nindent 10 }}

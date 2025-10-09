@@ -31,11 +31,12 @@ Production-ready nginx application with isolated k3d deployment.
 make up                    # Start Docker Compose
 make test                  # Run tests
 
-# Kubernetes (Recommended)
+# Kubernetes with Helm (Recommended)
 make k3d-cluster-isolated  # Create isolated cluster
 source scripts/k8s-env.sh  # Activate environment (bash/zsh/fish)
-make k3d-deploy-isolated   # Deploy application
+make k3d-deploy-isolated   # Deploy with Helm (uses values.yaml + values.dev.yaml)
 make k3d-test-isolated     # Test (automated)
+make k3d-local-access      # Open http://localhost:8080 via port-forward
 
 # Cleanup
 make k3d-destroy-isolated  # Clean everything
@@ -45,11 +46,18 @@ make k3d-destroy-isolated  # Clean everything
 
 ### Docker Compose
 ```bash
-make build && docker compose up -d
+# Works without .env files (uses defaults)
+make up                               # Start with defaults (port 8080, 1024 connections)
 docker ps | grep healthy              # Container health status
 curl localhost:8080                   # Main page
 curl localhost:8080/health            # Health endpoint
 docker logs nginx_hello               # Check logs
+
+# Optional: override with environment variables or .env file
+# NGINX_PORT=8081 docker compose up -d  # Custom port
+# or create .env file (in .gitignore):
+# NGINX_PORT=8081
+# NGINX_WORKER_CONNECTIONS=2048
 ```
 
 ### Kubernetes (k3s)
@@ -58,6 +66,9 @@ docker logs nginx_hello               # Check logs
 make k3d-cluster-isolated && source scripts/k8s-env.sh  # bash/zsh/fish
 make k3d-deploy-isolated
 
+# Local access (recommended for dev)
+make k3d-local-access                # Port-forward to http://localhost:8080 (instant)
+
 # Verify deployment
 kubectl get pods -o wide              # Check READY 1/1 status
 kubectl get svc,ingress               # Check services
@@ -65,21 +76,46 @@ kubectl logs -l app=nginx-hello       # Check application logs
 
 # Test application (automated)
 make k3d-test-isolated               # Runs health checks inside pods
-
-# Health checks verification
-kubectl describe pod -l app=nginx-hello | grep -A5 "Liveness\|Readiness"
 ```
 
-### Helm Deployment
+**Local vs Ingress access:**
+- `make k3d-local-access` - Direct port-forward, instant, for dev
+- `http://localhost:8080/` - Through Traefik Ingress, production-like, requires Traefik to be running
+
+### Helm Configuration (Like .env files)
+
+Configuration uses layered values files (similar to .env pattern):
+
 ```bash
-# Deploy with Helm
+helm/nginx-hello/
+├── values.yaml              # Base config (in Git)
+├── values.dev.yaml          # Dev environment (in Git)
+├── values.prod.yaml         # Production (in Git)
+├── values.local.yaml        # Your personal overrides (in .gitignore)
+└── values.local.yaml.example # Template for local config
+```
+
+**Local Development:**
+```bash
+# 1. Create your personal config (optional)
+cp helm/nginx-hello/values.local.yaml.example helm/nginx-hello/values.local.yaml
+
+# 2. Edit your overrides
+# values.local.yaml:
+# config:
+#   domains:
+#     - "myapp.local"
+
+# 3. Deploy (automatically uses values.local.yaml if exists)
 make helm-deploy-isolated
 
-# Or with custom values
-helm upgrade --install nginx-hello helm/nginx-hello/ \
-  --set config.domains='{example.com,www.example.com}' \
-  --set image.tag=$(git rev-parse --short HEAD) \
-  --set image.pullPolicy=Never
+# Helm loads in order: base → dev/prod → local
+```
+
+**Deploy to different environments:**
+```bash
+make helm-deploy-isolated  # Dev (values.yaml + values.dev.yaml + values.local.yaml)
+make helm-deploy-prod      # Prod (values.yaml + values.prod.yaml + values.local.yaml)
 ```
 
 ### Custom Ports (Avoid Conflicts)

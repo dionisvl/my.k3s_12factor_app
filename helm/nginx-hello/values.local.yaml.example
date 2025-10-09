@@ -1,0 +1,21 @@
+# Local overrides (copy to values.local.yaml and customize)
+# This file is in .gitignore - your personal settings
+
+# Example: Custom domains for local testing
+# config:
+#   domains:
+#     - "myapp.local"
+#     - "test.local"
+
+# Example: Different replica count
+# replicaCount: 1
+
+# Example: Custom resource limits
+# resources:
+#   limits:
+#     cpu: 200m
+#     memory: 64Mi
+
+# Example: Custom ports
+# config:
+#   nginxPort: "8081"

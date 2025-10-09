@@ -1,0 +1,22 @@
+# Dev environment values (for local k3d)
+replicaCount: 2
+
+image:
+  pullPolicy: Never  # Use local images
+
+config:
+  nginxWorkerConnections: "1024"
+  domains:
+    - "localhost"
+    - "site-r1.local"
+    - "site-r2.local"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 250m
+    memory: 64Mi
+
+environment: local

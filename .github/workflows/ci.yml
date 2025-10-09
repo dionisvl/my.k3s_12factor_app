@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+  workflow_dispatch:  # Manual trigger only
 
 env:
   IMAGE_NAME: nginx-hello
@@ -91,12 +95,22 @@ jobs:
           kubectl get nodes -o wide
           kubectl get pods --all-namespaces
       
-      - name: Deploy application (without ingress)
+      - name: Install Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: '3.14.4'
+
+      - name: Deploy with Helm
         run: |
           k3d image import ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -c test-cluster
-          export DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local"
-          envsubst < k3s/configmap.yaml | kubectl apply -f -
-          sed 's/nginx_hello-nginx:latest/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}/g' k3s/k8s-deployment.yaml | kubectl apply -f -
+          helm upgrade --install nginx-hello helm/nginx-hello/ \
+            --set image.repository=${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --set image.pullPolicy=IfNotPresent \
+            --set ingress.enabled=false \
+            -f helm/nginx-hello/values.yaml \
+            -f helm/nginx-hello/values.dev.yaml \
+            --wait --timeout=${{ env.HELM_TIMEOUT }}
       
       - name: Wait for deployment
         run: |
@@ -110,16 +124,12 @@ jobs:
           kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK"
           echo "✅ kubectl deployment tests passed"
       
-      - name: Test ingress setup (optional)
+      - name: Test ingress (Traefik)
         continue-on-error: true
         run: |
-          echo "=== Testing Traefik ingress setup ==="
-          # k3s comes with Traefik by default, check its status
+          echo "=== Testing Traefik ingress ==="
           kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik || echo "⚠️ Traefik not found"
-          
-          echo "=== Apply ingress configuration ==="
-          export DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local"
-          envsubst < k3s/ingress.yaml | kubectl apply -f - || echo "⚠️ Ingress apply failed"
+          kubectl get ingress
       
       - name: Debug on failure
         if: failure()
@@ -178,10 +188,10 @@ jobs:
       
       - name: Test Helm deployment
         run: |
-          kubectl get pods -l app.kubernetes.io/name=nginx-hello
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-hello --timeout=60s
-          
-          POD_NAME=$(kubectl get pods -l app.kubernetes.io/name=nginx-hello -o jsonpath='{.items[0].metadata.name}')
+          kubectl get pods -l app=nginx-hello
+          kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
+
+          POD_NAME=$(kubectl get pods -l app=nginx-hello -o jsonpath='{.items[0].metadata.name}')
           kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/ | grep -q "Hello World"
           kubectl exec "${POD_NAME}" -- curl -s http://localhost:8080/health | grep -q "OK"
           echo "✅ Helm deployment tests passed"
@@ -206,8 +216,8 @@ jobs:
             --set domain2=www.example.com \
             --wait --timeout=${{ env.HELM_TIMEOUT }}
           
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-hello --timeout=60s
-          kubectl get pods -l app.kubernetes.io/name=nginx-hello
+          kubectl wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
+          kubectl get pods -l app=nginx-hello
           echo "✅ Helm upgrade test passed"
       
       - name: Cleanup
@@ -220,9 +230,9 @@ jobs:
           echo "=== Helm Status ==="
           helm status nginx-hello-test || true
           echo "=== Resources ==="
-          kubectl get pods,svc -l app.kubernetes.io/name=nginx-hello
+          kubectl get pods,svc -l app=nginx-hello
           echo "=== Pod Logs ==="
-          kubectl logs -l app.kubernetes.io/name=nginx-hello --all-containers=true
+          kubectl logs -l app=nginx-hello --all-containers=true
           echo "=== Events ==="
           kubectl get events --sort-by='.lastTimestamp'
 

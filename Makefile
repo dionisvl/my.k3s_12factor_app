@@ -7,6 +7,7 @@ IMAGE_TAG ?= $(GIT_COMMIT)
 # K3d configuration
 K3D_API_PORT ?= 6443
 K3D_LB_PORT ?= 8080
+K3S_VERSION ?= v1.31.5-k3s1  # Pin k3s version
 
 BLUE := \033[36m
 GREEN := \033[32m
@@ -53,7 +54,7 @@ test-custom-config: ## Test custom configuration
 # k3d (Recommended - Isolated)
 k3d-cluster-isolated: ## Create isolated k3d cluster for this project
 	@echo "$(GREEN)Creating isolated k3d cluster...$(RESET)"
-	k3d cluster create hello-world-cluster --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
+	k3d cluster create hello-world-cluster --image rancher/k3s:$(K3S_VERSION) --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
 	@k3d kubeconfig get hello-world-cluster > kubeconfig-hello-world.yaml
 	@echo "$(GREEN)Isolated cluster created!$(RESET)"
 	@echo "$(BLUE)To use: source scripts/k8s-env.sh$(RESET)"
@@ -61,11 +62,7 @@ k3d-cluster-isolated: ## Create isolated k3d cluster for this project
 k3d-load-isolated: build ## Load Docker image into isolated cluster
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-world-cluster
 
-k3d-deploy-isolated: k3d-load-isolated ## Deploy to isolated cluster
-	@echo "$(GREEN)Deploying to isolated k3d cluster...$(RESET)"
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
-	kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f k3s/k8s-deployment.yaml
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress-dev.yaml | kubectl --kubeconfig=./kubeconfig-hello-world.yaml apply -f -
+k3d-deploy-isolated: helm-deploy-isolated ## Deploy to isolated cluster (alias for helm-deploy-isolated)
 
 k3d-test-isolated: ## Test isolated cluster deployment
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
@@ -80,6 +77,12 @@ k3d-status-isolated: ## Show isolated cluster status
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get svc nginx-hello-service
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml get ingress
 
+k3d-local-access: ## Open local access via port-forward (for dev)
+	@echo "$(GREEN)Starting port-forward to nginx service...$(RESET)"
+	@echo "$(BLUE)Open http://localhost:8080/ in browser$(RESET)"
+	@echo "$(BLUE)Press Ctrl+C to stop$(RESET)"
+	kubectl --kubeconfig=./kubeconfig-hello-world.yaml port-forward svc/nginx-hello-service 8080:8080
+
 k3d-destroy-isolated: ## Destroy isolated cluster and clean up
 	@echo "$(GREEN)Destroying isolated cluster...$(RESET)"
 	k3d cluster delete hello-world-cluster 2>/dev/null || true
@@ -89,7 +92,7 @@ k3d-destroy-isolated: ## Destroy isolated cluster and clean up
 # k3d (Legacy - Uses system kubeconfig)
 k3d-cluster: ## Create k3d cluster (uses system kubeconfig)
 	@echo "$(GREEN)Creating k3d cluster...$(RESET)"
-	k3d cluster create hello-cluster --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
+	k3d cluster create hello-cluster --image rancher/k3s:$(K3S_VERSION) --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
 	@echo "$(GREEN)Waiting for cluster to be ready...$(RESET)"
 	kubectl wait --for=condition=ready nodes --all --timeout=60s
 	@echo "$(GREEN)Cluster ready! Traefik ingress is enabled by default.$(RESET)"
@@ -97,28 +100,38 @@ k3d-cluster: ## Create k3d cluster (uses system kubeconfig)
 k3d-load: build ## Load Docker image into k3d cluster
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-cluster
 
-k3d-deploy: k3d-load ## Deploy to k3d cluster
-	@echo "$(GREEN)Deploying to k3d...$(RESET)"
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/configmap.yaml | kubectl apply -f -
-	kubectl apply -f k3s/k8s-deployment.yaml
-	DOMAIN_1="localhost" DOMAIN_2="site-r1.local" DOMAIN_3="site-r2.local" envsubst < k3s/ingress-dev.yaml | kubectl apply -f -
+k3d-deploy: helm-deploy ## Deploy to k3d cluster (alias for helm-deploy)
 
 k3d-destroy: ## Destroy k3d cluster
 	@echo "$(GREEN)Destroying k3d cluster...$(RESET)"
 	k3d cluster delete hello-cluster 2>/dev/null || true
 
+# Helm values file detection
+HELM_VALUES_BASE := helm/nginx-hello/values.yaml
+HELM_VALUES_DEV := helm/nginx-hello/values.dev.yaml
+HELM_VALUES_PROD := helm/nginx-hello/values.prod.yaml
+HELM_VALUES_LOCAL := helm/nginx-hello/values.local.yaml
+
+# Build helm flags with local override if exists
+define helm_flags
+	-f $(HELM_VALUES_BASE) -f $(1) $(if $(wildcard $(HELM_VALUES_LOCAL)),-f $(HELM_VALUES_LOCAL),)
+endef
+
 # Helm
-helm-deploy-isolated: k3d-load-isolated ## Deploy using Helm to isolated cluster
+helm-deploy-isolated: k3d-load-isolated ## Deploy using Helm to isolated cluster (dev + local if exists)
 	@echo "$(GREEN)Deploying with Helm to isolated cluster...$(RESET)"
-	helm --kubeconfig=./kubeconfig-hello-world.yaml upgrade --install nginx-hello helm/nginx-hello/ --create-namespace --namespace default
+	@if [ -f "$(HELM_VALUES_LOCAL)" ]; then echo "$(BLUE)Using local overrides from values.local.yaml$(RESET)"; fi
+	helm --kubeconfig=./kubeconfig-hello-world.yaml upgrade --install nginx-hello helm/nginx-hello/ $(call helm_flags,$(HELM_VALUES_DEV)) --set image.tag=$(IMAGE_TAG) --create-namespace --namespace default
 
-helm-deploy: k3d-load ## Deploy using Helm (legacy)
+helm-deploy: k3d-load ## Deploy using Helm (dev + local if exists)
 	@echo "$(GREEN)Deploying with Helm...$(RESET)"
-	helm upgrade --install nginx-hello helm/nginx-hello/ --create-namespace --namespace default
+	@if [ -f "$(HELM_VALUES_LOCAL)" ]; then echo "$(BLUE)Using local overrides from values.local.yaml$(RESET)"; fi
+	helm upgrade --install nginx-hello helm/nginx-hello/ $(call helm_flags,$(HELM_VALUES_DEV)) --set image.tag=$(IMAGE_TAG) --create-namespace --namespace default
 
-helm-deploy-prod: k3d-load ## Deploy using Helm (production)
+helm-deploy-prod: k3d-load ## Deploy using Helm (production + local if exists)
 	@echo "$(GREEN)Deploying with Helm (production)...$(RESET)"
-	helm upgrade --install nginx-hello helm/nginx-hello/ -f helm/nginx-hello/values-prod.yaml --create-namespace --namespace default
+	@if [ -f "$(HELM_VALUES_LOCAL)" ]; then echo "$(BLUE)Using local overrides from values.local.yaml$(RESET)"; fi
+	helm upgrade --install nginx-hello helm/nginx-hello/ $(call helm_flags,$(HELM_VALUES_PROD)) --set image.tag=$(IMAGE_TAG) --create-namespace --namespace default
 
 helm-destroy: ## Uninstall Helm deployment
 	@echo "$(GREEN)Uninstalling Helm deployment...$(RESET)"

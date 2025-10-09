@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "nginx-hello.fullname" . }}-ingress
+  name: nginx-hello-ingress
   labels:
-    {{- include "nginx-hello.labels" . | nindent 4 }}
+    app: nginx-hello
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -31,22 +31,6 @@ spec:
       secretName: {{ .Values.tls.secretName }}
   {{- end }}
   rules:
-    {{- if .Values.ingress.hosts }}
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
-      http:
-        paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType }}
-            backend:
-              service:
-                name: {{ include "nginx-hello.fullname" $ }}-service
-                port:
-                  number: {{ $.Values.service.port }}
-          {{- end }}
-    {{- end }}
-    {{- else }}
     {{- range .Values.config.domains }}
     - host: {{ . | quote }}
       http:
@@ -55,9 +39,8 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "nginx-hello.fullname" $ }}-service
+                name: nginx-hello-service
                 port:
                   number: {{ $.Values.service.port }}
-    {{- end }}
     {{- end }}
 {{- end }}
