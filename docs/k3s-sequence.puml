@@ -1,4 +1,6 @@
-@startuml k3s Nginx Hello World Sequence (Enhanced)
+@startuml
+Title k3s Nginx Hello World Sequence
+
 !theme plain
 
 actor Developer as D
@@ -10,19 +12,13 @@ participant "Scheduler" as S
 participant "Kubelet" as KL
 participant "nginx Pod 1" as NP1
 participant "nginx Pod 2" as NP2
-participant "nginx-hello-service" as SVC
 
 == Build & Load Image ==
-D -> D: docker build -t nginx_hello-nginx:4190fc7 .\n(with config.domains support + curl for healthcheck)
-D -> K3S: k3d image import nginx_hello-nginx:4190fc7 -c hello-world-cluster
+D -> D: docker build -t nginx_hello-nginx:latest .
+D -> K3S: k3d image import nginx_hello-nginx:latest -c hello-world-cluster
 
-== Deployment Creation (Multiple Options) ==
-alt Manual k8s manifests
-    D -> K: DOMAIN_1="localhost" DOMAIN_2="site-r1.local" envsubst < k3s/configmap.yaml | kubectl apply -f -
-    D -> K: kubectl apply -f k3s/k8s-deployment.yaml
-else Helm deployment
-    D -> K: helm upgrade --install nginx-hello helm/nginx-hello/\n--set config.domains='{localhost,site-r1.local,site-r2.local}'\n --set image.tag=4190fc7 --set image.pullPolicy=Never
-end
+== Helm Deployment ==
+D -> K: helm upgrade --install nginx-hello helm/nginx-hello/\n-f values.yaml -f values.dev.yaml
 K -> API: Create ConfigMap, Deployment & Service
 API -> CM: Watch Deployment (replicas: 2)
 CM -> API: Create ReplicaSet
@@ -34,8 +30,8 @@ API -> KL: Create Pod nginx-hello-2
 == Pod Initialization ==
 KL -> NP1: Start nginx container (non-root user:101)
 KL -> NP2: Start nginx container (non-root user:101)
-NP1 -> NP1: Read config.domains from ConfigMap\nBuild NGINX_SERVER_NAME in entrypoint.sh\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nServe src/html/index.html & /health endpoint\nLogs to stdout/stderr (12-factor compliance)
-NP2 -> NP2: Read config.domains from ConfigMap\nBuild NGINX_SERVER_NAME in entrypoint.sh\nenvsubst nginx.conf.template -> /tmp/nginx.conf\nServe src/html/index.html & /health endpoint\nLogs to stdout/stderr (12-factor compliance)
+NP1 -> NP1: Read config.domains from ConfigMap\nGenerate nginx.conf via envsubst\nServe /health & static HTML
+NP2 -> NP2: Same initialization process
 
 == Health Checks ==
 KL -> NP1: Readiness Probe GET /health
@@ -44,24 +40,24 @@ KL -> NP2: Readiness Probe GET /health
 NP2 -> KL: HTTP 200 OK
 KL -> API: Pods Ready
 
-== Service Creation ==
-API -> KP: Create Service nginx-hello-service
-KP -> KP: Setup iptables rules\nfor NodePort 30080\nLoad balance between pods
+== Service & Load Balancing ==
+API -> K3S: Create Service nginx-hello-service
+note over K3S: kube-proxy sets up iptables\nLoad balances between pods
 
 == Automated Testing (make k3d-test-isolated) ==
 D -> K: kubectl exec POD_NAME -- curl -f http://localhost:8080/
-K -> NP1: Execute curl inside pod (direct internal access)
-NP1 -> NP1: Serve static HTML\n/usr/share/nginx/html/index.html\n(🎉 Hello World with CSS)
-NP1 -> K: HTTP 200 + Beautiful HTML content
-K -> D: ✅ Main page OK
+K -> NP1: Execute curl inside pod
+NP1 -> NP1: Serve static HTML
+NP1 -> K: HTTP 200 + HTML content
+K -> D: Main page OK
 
 D -> K: kubectl exec POD_NAME -- curl -f http://localhost:8080/health
-K -> NP2: Execute curl inside pod (direct internal access)
-NP2 -> NP2: Process health check\nreturn 200 'OK'
+K -> NP2: Execute curl inside pod
+NP2 -> NP2: Health check endpoint
 NP2 -> K: HTTP 200 OK
-K -> D: ✅ Health check OK
+K -> D: Health check OK
 
-note over D, NP2: Automated testing avoids port-forward hangs\nand tests application directly in cluster
+note over D, K: Tests pods directly without port-forward
 
 == Continuous Health Monitoring ==
 loop Every 10 seconds (Liveness) / 5 seconds (Readiness)
@@ -73,18 +69,12 @@ loop Every 10 seconds (Liveness) / 5 seconds (Readiness)
 end
 
 == Configuration Update (Production) ==
-alt Via Helm values
-    D -> K: helm upgrade nginx-hello helm/nginx-hello/\n--values helm/nginx-hello/values-prod.yaml\n--set config.domains='{example.com,www.example.com}'
-else Via kubectl
-    D -> K: DOMAIN_1="example.com" DOMAIN_2="www.example.com" envsubst < k3s/configmap-prod.yaml | kubectl apply -f -
-    D -> K: kubectl rollout restart deployment nginx-hello
-end
-K -> API: Update ConfigMap with new domains
-K -> API: Restart deployment (if needed)
+D -> K: helm upgrade nginx-hello helm/nginx-hello/\n-f values.yaml -f values.prod.yaml
+K -> API: Update ConfigMap & Deployment
 API -> KL: Rolling restart pods
-note over D, KL: New pods pick up production domains\nfrom consolidated config.domains
+note over D, KL: New pods pick up production config\n(3 replicas, 2048 worker connections)
 
-== Scaling Test ==
+== Scaling ==
 D -> K: kubectl scale deployment nginx-hello --replicas=1
 K -> API: Update replicas
 API -> KL: Terminate Pod nginx-hello-2
@@ -92,14 +82,10 @@ KL -> NP2: Graceful shutdown
 D -> K: kubectl scale deployment nginx-hello --replicas=2
 K -> API: Update replicas
 API -> KL: Create new Pod nginx-hello-3
-note over D, KL: Rolling update ensures zero downtime
+note over KL: RollingUpdate strategy: maxUnavailable=1, maxSurge=1
 
-== Ingress Setup (Traefik - k3s built-in) ==
-note over D, K3S: k3s includes Traefik ingress controller by default
-D -> K: kubectl apply -f k3s/ingress-dev.yaml\n(ingressClassName: traefik)
-K -> API: Create Ingress resource
-API -> K3S: Configure Traefik routing rules
-note over API, K3S: Ingress ready but testing uses direct pod access\nfor reliability and speed
+== Ingress (Created via Helm) ==
+note over D, K3S: Helm already created Ingress resource\nTraefik (k3s built-in) handles routing\nDev uses kubectl port-forward for simplicity
 
 == Custom Ports (Avoid Conflicts) ==
 note over D, K3S: Multiple projects can run simultaneously
