@@ -1,4 +1,4 @@
-# K3s Nginx Hello World Project
+# K3s Nginx Hello World
 
 ![CI/CD](https://github.com/dionisvl/my.k8s_12factor_app/workflows/CI/badge.svg)
 ![Version](https://img.shields.io/badge/version-v1.0.2-blue)
@@ -29,12 +29,11 @@ Production-ready nginx application with isolated k3d deployment.
 ```bash
 # Development
 make up                    # Start Docker Compose
-make test                  # Run tests
 
 # Kubernetes with Helm (Recommended)
 make k3d-cluster-isolated  # Create isolated cluster
 source scripts/k8s-env.sh  # Activate environment (bash/zsh/fish)
-make k3d-deploy-isolated   # Deploy with Helm (uses values.yaml + values.dev.yaml)
+make helm-deploy-isolated   # Deploy with Helm (uses values.yaml + values.dev.yaml)
 make k3d-test-isolated     # Test (automated)
 make k3d-local-access      # Open http://localhost:8080 via port-forward
 
@@ -64,7 +63,7 @@ docker logs nginx_hello               # Check logs
 ```bash
 # Deploy
 make k3d-cluster-isolated && source scripts/k8s-env.sh  # bash/zsh/fish
-make k3d-deploy-isolated
+make helm-deploy-isolated
 
 # Local access (recommended for dev)
 make k3d-local-access                # Port-forward to http://localhost:8080 (instant)

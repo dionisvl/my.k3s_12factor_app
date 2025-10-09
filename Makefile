@@ -7,7 +7,7 @@ IMAGE_TAG ?= $(GIT_COMMIT)
 # K3d configuration
 K3D_API_PORT ?= 6443
 K3D_LB_PORT ?= 8080
-K3S_VERSION ?= v1.31.5-k3s1  # Pin k3s version
+K3S_VERSION ?= v1.31.5-k3s1
 
 BLUE := \033[36m
 GREEN := \033[32m
@@ -26,32 +26,6 @@ down:
 build:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-test: test-build test-run
-
-test-build: ## Test Docker build
-	@echo "$(GREEN)Testing build...$(RESET)"
-	docker build -t $(IMAGE_NAME):test .
-
-test-run: ## Test application runtime
-	@echo "$(GREEN)Testing runtime...$(RESET)"
-	@docker rm -f nginx-test 2>/dev/null || true
-	@docker run -d --name nginx-test -p 8081:8080 $(IMAGE_NAME):$(IMAGE_TAG)
-	@sleep 5
-	@curl -f http://localhost:8081/ | grep -q "Hello World" && echo "$(GREEN)✅ Main page OK$(RESET)"
-	@curl -f http://localhost:8081/health | grep -q "OK" && echo "$(GREEN)✅ Health check OK$(RESET)"
-	@docker stop nginx-test && docker rm nginx-test
-
-test-custom-config: ## Test custom configuration
-	@echo "$(GREEN)Testing custom config...$(RESET)"
-	@docker rm -f nginx-test-custom 2>/dev/null || true
-	docker run -d --name nginx-test-custom -p 8081:8081 \
-		-e NGINX_PORT=8081 -e NGINX_SERVER_NAME="test.example.com" \
-		$(IMAGE_NAME):$(IMAGE_TAG)
-	@sleep 3
-	@curl -f http://localhost:8081/ | grep -q "Hello World" && echo "$(GREEN)✅ Custom config OK$(RESET)"
-	@docker stop nginx-test-custom && docker rm nginx-test-custom
-
-# k3d (Recommended - Isolated)
 k3d-cluster-isolated: ## Create isolated k3d cluster for this project
 	@echo "$(GREEN)Creating isolated k3d cluster...$(RESET)"
 	k3d cluster create hello-world-cluster --image rancher/k3s:$(K3S_VERSION) --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*' --kubeconfig-update-default=false --kubeconfig-switch-context=false
@@ -61,8 +35,6 @@ k3d-cluster-isolated: ## Create isolated k3d cluster for this project
 
 k3d-load-isolated: build ## Load Docker image into isolated cluster
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-world-cluster
-
-k3d-deploy-isolated: helm-deploy-isolated ## Deploy to isolated cluster (alias for helm-deploy-isolated)
 
 k3d-test-isolated: ## Test isolated cluster deployment
 	kubectl --kubeconfig=./kubeconfig-hello-world.yaml wait --for=condition=ready pod -l app=nginx-hello --timeout=60s
@@ -89,18 +61,8 @@ k3d-destroy-isolated: ## Destroy isolated cluster and clean up
 	@rm -f kubeconfig-hello-world.yaml
 	@echo "$(GREEN)Cleanup complete!$(RESET)"
 
-# k3d (Legacy - Uses system kubeconfig)
-k3d-cluster: ## Create k3d cluster (uses system kubeconfig)
-	@echo "$(GREEN)Creating k3d cluster...$(RESET)"
-	k3d cluster create hello-cluster --image rancher/k3s:$(K3S_VERSION) --api-port 127.0.0.1:$(K3D_API_PORT) --servers 1 --agents 0 --port $(K3D_LB_PORT):80@loadbalancer --k3s-arg '--tls-san=127.0.0.1@server:*' --k3s-arg '--tls-san=localhost@server:*'
-	@echo "$(GREEN)Waiting for cluster to be ready...$(RESET)"
-	kubectl wait --for=condition=ready nodes --all --timeout=60s
-	@echo "$(GREEN)Cluster ready! Traefik ingress is enabled by default.$(RESET)"
-
 k3d-load: build ## Load Docker image into k3d cluster
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c hello-cluster
-
-k3d-deploy: helm-deploy ## Deploy to k3d cluster (alias for helm-deploy)
 
 k3d-destroy: ## Destroy k3d cluster
 	@echo "$(GREEN)Destroying k3d cluster...$(RESET)"
@@ -143,11 +105,9 @@ helm-status: ## Show Helm deployment status
 	@echo "$(GREEN)Kubernetes resources:$(RESET)"
 	kubectl get pods,svc,ingress -l app.kubernetes.io/name=nginx-hello 2>/dev/null || echo "No resources found"
 
-# Cleanup
 clean: ## Clean up Docker containers and images
 	@docker rm -f nginx-test nginx-test-custom 2>/dev/null || true
 	@docker rmi $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):test 2>/dev/null || true
 
 # Quick workflows
-deploy-isolated: k3d-cluster-isolated k3d-deploy-isolated k3d-test-isolated ## Full isolated deployment workflow
-deploy-legacy: k3d-cluster k3d-deploy ## Legacy deployment workflow
+deploy-isolated: k3d-cluster-isolated helm-deploy-isolated k3d-test-isolated ## Full isolated deployment workflow
