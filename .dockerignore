@@ -1,0 +1,16 @@
+.git
+.github
+*.md
+test_logs
+kubeconfig*.yaml
+.idea
+.vscode
+helm/
+k3s/
+scripts/k8s-env.sh
+Makefile
+compose*.yml
+.env*
+*.swp
+*.swo
+.DS_Store

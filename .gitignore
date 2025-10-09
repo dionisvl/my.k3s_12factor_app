@@ -1,5 +1,6 @@
 node_modules/
 *.log
+.env
 .env.local
 .env.test
 .env.*.local
@@ -22,3 +23,8 @@ coverage/
 # Kubernetes configs (project-specific)
 kubeconfig*.yaml
 !kubeconfig-example.yaml
+kubeconfig-hello-world.yaml
+
+# Helm local values (like .env.local)
+**/values.local.yaml
+**/values.*.local.yaml
